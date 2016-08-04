@@ -22,7 +22,8 @@ export PARALLEL_BUILD := -j`grep -c '^processor' /proc/cpuinfo`
 #
 #
 SEP=echo "\033[41;1m   $@   \033[0m"
-
+#ipset_ver:ipset或ipset6二选一
+IPSET_VER := ipset
 export CFLAGS += -DBCMWPA2
 ifeq ($(TCONFIG_BCMWL6),y)
 export CFLAGS += -DBCMQOS
@@ -216,7 +217,7 @@ obj-y += libnfnetlink
 obj-y += miniupnpd
 #	obj-y += upnp
 obj-$(CONFIG_LINUX26) += libmnl
-obj-$(CONFIG_LINUX26) += ipset
+obj-$(CONFIG_LINUX26) += $(IPSET_VER)
 
 
 #
@@ -668,7 +669,7 @@ endif
 	$(if $(TCONFIG_JFFS2),$(if $(TCONFIG_JFFSV1),@mv,@cp -f),@mv) $(TARGETDIR)/lib/modules/*/kernel/fs/jffs2.*o $(PLATFORMDIR)/extras/ || true
 	$(if $(TCONFIG_JFFS2),$(if $(TCONFIG_JFFSV1),@mv,@cp -f),@mv) $(TARGETDIR)/lib/modules/*/kernel/lib/zlib_*.*o $(PLATFORMDIR)/extras/ || true
 	$(if $(TCONFIG_JFFS2),$(if $(TCONFIG_JFFSV1),@cp -f,@mv),@mv) $(TARGETDIR)/lib/modules/*/kernel/fs/jffs.*o $(PLATFORMDIR)/extras/ || true
-	[ ! -f $(TARGETDIR)/lib/modules/*/kernel/lib/* ] && rm -rf $(TARGETDIR)/lib/modules/*/kernel/lib || true
+	#[ ! -f $(TARGETDIR)/lib/modules/*/kernel/lib/* ] && rm -rf $(TARGETDIR)/lib/modules/*/kernel/lib || true
 	$(if $(TCONFIG_L7),@cp -f,@mv) $(TARGETDIR)/lib/modules/*/kernel/net/ipv4/netfilter/ipt_layer7.*o $(PLATFORMDIR)/extras/ || true
 	$(if $(TCONFIG_L7),@cp -f,@mv) $(TARGETDIR)/lib/modules/*/kernel/net/netfilter/xt_layer7.*o $(PLATFORMDIR)/extras/ || true
 
@@ -705,6 +706,8 @@ endif
 
 	busybox/examples/depmod.pl -k $(LINUXDIR)/vmlinux -b $(TARGETDIR)/lib/modules/*/
 	@mv $(TARGETDIR)/lib/modules/*/modules.dep $(TARGETDIR)/lib/modules/
+#	#rm -rf $(TARGETDIR)/opt || true
+#	#ln -sf /tmp/opt $(TARGETDIR)/opt || true
 	@echo ---
 
 	@rm -f $(TARGETDIR)/lib/modules/*/build
@@ -1033,6 +1036,7 @@ iptables-1.4.x-install:
 	install -D iptables-1.4.x/iptables/.libs/xtables-multi $(INSTALLDIR)/iptables-1.4.x/usr/sbin/xtables-multi
 	cd $(INSTALLDIR)/iptables-1.4.x/usr/sbin && \
 		ln -sf xtables-multi iptables-restore && \
+		ln -sf xtables-multi iptables-save && \
 		ln -sf xtables-multi iptables
 	install -d $(INSTALLDIR)/iptables-1.4.x/usr/lib/xtables
 	install -D iptables-1.4.x/libiptc/.libs/lib*.so $(INSTALLDIR)/iptables-1.4.x/usr/lib/
@@ -1052,6 +1056,7 @@ iptables-1.4.x-install:
 ifeq ($(TCONFIG_IPV6),y)
 	cd $(INSTALLDIR)/iptables-1.4.x/usr/sbin && \
 		ln -sf xtables-multi ip6tables-restore && \
+		ln -sf xtables-multi ip6tables-save && \
 		ln -sf xtables-multi ip6tables
 endif
 
@@ -1252,6 +1257,7 @@ dhcpv6-clean:
 p910nd:
 samba:
 samba3:
+	@$(MAKE) -C samba3
 
 samba-3.5.8:
 	@$(MAKE) -C samba-3.5.8 $(PARALLEL_BUILD)
@@ -1310,11 +1316,11 @@ pptpd-clean:
 	rm -rf pptpd/stamp-h1 pptpd/.deps
 
 pppd/Makefile: pppd/linux/Makefile.top
-	cd pppd && $(CONFIGURE) --prefix=/usr --sysconfdir=/tmp
+	cd pppd && ksrc=$(LINUXDIR) && $(CONFIGURE) --prefix=/usr --sysconfdir=/tmp
 
 pppd: pppd/Makefile
 	@$(SEP)
-	@$(MAKE) -C pppd MFLAGS='$(if $(TCONFIG_IPV6),HAVE_INET6=y,) EXTRACFLAGS="$(EXTRACFLAGS)"'
+	@$(MAKE) -C pppd KERNELDIR=$(LINUXDIR) MFLAGS='$(if $(TCONFIG_IPV6),HAVE_INET6=y,) EXTRACFLAGS="$(EXTRACFLAGS)"'
 
 pppd-clean:
 	-@$(MAKE) -C pppd clean
@@ -1370,12 +1376,15 @@ rp-l2tp-install:
 	$(STRIP) $(INSTALLDIR)/rp-l2tp/usr/sbin/l2tpd
 
 xl2tpd: pppd
-	CFLAGS="-g $(EXTRACFLAGS)" $(MAKE) -C $@ PREFIX=/usr xl2tpd
+	@$(SEP)
+	CFLAGS="-g $(EXTRACFLAGS)" && \
+	$(MAKE) -C $@ KERNELSRC=$(LINUXDIR) PREFIX=/usr all
 
 xl2tpd-install: xl2tpd
 	install -D xl2tpd/xl2tpd $(INSTALLDIR)/xl2tpd/usr/sbin/xl2tpd
 	$(STRIP) $(INSTALLDIR)/xl2tpd/usr/sbin/xl2tpd
-
+	install -D xl2tpd/xl2tpd-control $(INSTALLDIR)/xl2tpd/usr/sbin/xl2tpd-control
+	$(STRIP) $(INSTALLDIR)/xl2tpd/usr/sbin/xl2tpd-control
 
 bpalogin-install:
 	install -D bpalogin/bpalogin $(INSTALLDIR)/bpalogin/usr/sbin/bpalogin
@@ -1985,6 +1994,7 @@ php/stamp-h1: pcre zlib libiconv sqlite libxml2 libpng jpeg libcurl
 	LIBS="-L$(TOP)/pcre/.libs -L$(TOP)/sqlite/.libs -L$(TOP)/zlib -L$(TOP)/libxml2/.libs -L$(TOP)/libiconv/lib/.libs -L$(TOP)/libpng/.libs -lz \
 		-lsqlite3 -ldl -lpthread -liconv -lxml2 -lstdc++ -lcurl" \
 	PHP_FCGI_LIBXML_DIR="$(TOP)/libxml2/staged/usr" \
+	YACC=/usr/local/bin/yacc-2.7 \
 	ac_cv_func_memcmp_working=yes \
 	cv_php_mbstring_stdarg=yes \
 	$(CONFIGURE) --prefix=/usr \
@@ -2106,7 +2116,7 @@ libncurses/stamp-h1:
 	CFLAGS="-Os -Wall $(EXTRACFLAGS) -ffunction-sections -fdata-sections -fPIC" \
 	LDFLAGS="-ffunction-sections -fdata-sections -Wl,--gc-sections -fPIC" \
 	LIBS="-lstdc++" \
-	$(CONFIGURE) --prefix=/usr --with-shared --with-normal --disable-debug --without-ada --without-manpages --without-progs --without-tests
+	$(CONFIGURE) --prefix=/usr --with-shared --with-normal --disable-debug --without-ada --without-manpages --without-progs --without-tests --with-termlib --enable-termcap
 	touch libncurses/stamp-h1
 
 libncurses: libncurses/stamp-h1
@@ -2116,8 +2126,9 @@ libncurses: libncurses/stamp-h1
 
 libncurses-clean:
 	-@$(MAKE) -C libncurses clean
-	-@rm -f libncurses/stamp-h1 libncurses/Makefile
-	@rm -rf libncurses/staged
+	-@rm -f libncurses/stamp-h1
+	-@rm -f libncurses/Makefile
+	-@rm -rf libncurses/staged
 
 libncurses-install: libncurses
 	install -d $(INSTALLDIR)/libncurses/usr/lib
@@ -2144,6 +2155,36 @@ libncurses-install: libncurses
 		ln -sf libform.so.6 libform.so && \
 		ln -sf libmenu.so.6 libmenu.so
 
+#	$(CONFIGURE) --host=$(HOST) --build=x86_64-linux-gnu  --prefix=/usr \
+#		--without-debug --without-docs --without-man --with-charset=utf8 --with-extra-charsets=ascii,latin1,gb2312,gbk \
+#		--enable-shared --disable-static \
+#		--without-mysqlmanager \
+#		--with-pthread \
+#		--with-ssl \
+#		--with-geometry \
+#		--with-low-memory \
+#		--enable-assembler \
+#		--with-zlib-dir="$(TOP)/zlib/staged/usr" \
+#cmake . -DCMAKE_TOOLCHAIN_FILE=wangmice.cp -DCMAKE_INSTALL_PREFIX=/usr -DWITH_DEBUG=0 \
+#		-DDEFAULT_CHARSET=utf8 -DWITH_ZLIB="$(TOP)/zlib/staged/usr" -DWITH_SSL=system \
+#		-DEXTRA_CGARSETS=ascii,latin1,gb2312,gbk -DDEFAULT_COLLATION=utf8_general_ci \
+#		-DCURSES_LIBRARY=/usr/lib/x86_64-linux-gnu/libncurses.so -DCURSES_INCLUDE_PATH=/usr/include && \
+
+#	$(CONFIGURE) --host=$(HOST) --build=x86_64-linux-gnu  --prefix=/usr \
+#		--without-debug --without-docs --without-man --with-charset=utf8 --with-extra-charsets=ascii,latin1,gb2312,gbk \
+#		--enable-shared --disable-static \
+#		--without-mysqlmanager \
+#		--with-pthread \
+#		--with-ssl \
+#		--with-geometry \
+#		--with-low-memory \
+#		--enable-assembler \
+#		--with-zlib-dir="$(TOP)/zlib/staged/usr" \
+#cmake . -DCMAKE_TOOLCHAIN_FILE=wangmice.cp -DCMAKE_INSTALL_PREFIX=/usr -DWITH_DEBUG=0 \
+#		-DDEFAULT_CHARSET=utf8 -DWITH_ZLIB="$(TOP)/zlib/staged/usr" -DWITH_SSL=system \
+#		-DEXTRA_CGARSETS=ascii,latin1,gb2312,gbk -DDEFAULT_COLLATION=utf8_general_ci \
+#		-DCURSES_LIBRARY=/usr/lib/x86_64-linux-gnu/libncurses.so -DCURSES_INCLUDE_PATH=/usr/include && \
+#cp -f configure.arm configure &&
 mysql/stamp-h1: openssl zlib libncurses
 	@$(SEP)
 	cd mysql && CC=$(CC) && cp -f configure.arm configure && \
@@ -2157,12 +2198,11 @@ mysql/stamp-h1: openssl zlib libncurses
 		--without-mysqlmanager \
 		--with-pthread \
 		--with-ssl \
-		--without-docs \
 		--with-geometry \
 		--with-low-memory \
 		--enable-assembler \
-		--with-zlib-dir="$(TOP)/zlib/staged/usr" \
-		ac_cv_c_stack_direction=-1
+		--with-zlib-dir="$(TOP)/zlib/staged/usr"
+		
 	cd mysql && tar xvfz .host.tgz
 	# Update time of config.status to avoid run 'config.status --recheck'
 	touch mysql/config.status
@@ -2502,14 +2542,14 @@ e2fsprogs-clean:
 	@rm -rf e2fsprogs/staged
 
 nfs-utils/stamp-h1: libevent-install e2fsprogs portmap libnfsidmap-install
-	cd nfs-utils && STRIP=$(STRIP) \
-	CFLAGS="-Os -Wall -fno-delete-null-pointer-checks -funit-at-a-time \
+	cd nfs-utils && STRIP=$(STRIP) && \
+	export CFLAGS="-Os -Wall -fno-delete-null-pointer-checks -funit-at-a-time \
 	-I$(TOP)/libevent/staged/usr/local/include -I$(TOP)/e2fsprogs/lib \
-	-I$(TOP)/libnfsidmap/staged/usr/include -ffunction-sections -fdata-sections" \
-	LDFLAGS="-L$(TOP)/libevent/staged/usr/local/lib -L$(TOP)/e2fsprogs/lib \
-	-L$(TOP)/libnfsidmap/staged/usr/lib -ffunction-sections -fdata-sections -Wl,--gc-sections -fPIC" \
-	ac_cv_func_malloc_0_nonnull=yes \
-	ac_cv_func_realloc_0_nonnull=yes \
+	-I$(TOP)/libnfsidmap/staged/usr/include -ffunction-sections -fdata-sections" && \
+	export LDFLAGS="-L$(TOP)/libevent/staged/usr/local/lib -L$(TOP)/e2fsprogs/lib \
+	-L$(TOP)/libnfsidmap/staged/usr/lib -ffunction-sections -fdata-sections -Wl,--gc-sections -fPIC" && \
+	export ac_cv_func_malloc_0_nonnull=yes && \
+	export ac_cv_func_realloc_0_nonnull=yes && \
 	$(CONFIGURE) --disable-gss --without-tcp-wrappers --enable-static --enable-shared \
 	--enable-nfsv4 --enable-nfsv3
 	touch nfs-utils/stamp-h1
@@ -2723,10 +2763,11 @@ mdadm-install: mdadm
 mdadm-clean:
 	-@$(MAKE) -C mdadm clean
 
+#/usr/bin/aclocal && /usr/bin/automake --add-missing && autoconf -v && autoheader
 libmnl/stamp-h1:
-	cd $(TOP)/libmnl && CC=$(CC) STRIP=$(STRIP) \
+	cd $(TOP)/libmnl && CC=$(CC) STRIP=$(STRIP)  && ./autogen.sh && \
 	CFLAGS="-Os -Wall $(EXTRACFLAGS) -ffunction-sections -fdata-sections" \
-	LDFLAGS="-ffunction-sections -fdata-sections -Wl,--gc-sections" \
+	LDFLAGS="-ffunction-sections -fdata-sections -Wl,--gc-sections" && \
 	$(CONFIGURE) --prefix=/usr
 	touch libmnl/stamp-h1
 
@@ -2746,32 +2787,46 @@ libmnl-clean:
 	-@$(MAKE) -C libmnl clean
 	-@rm -rf libmnl/staged
 
-ipset/stamp-h1: libmnl
-	cd $(TOP)/ipset && CC=$(CC) STRIP=$(STRIP) \
-	autoreconf && \
+# --with-kmod=no--with-kbuild="$(LINUXDIR)"autoreconf &&
+ipset6/stamp-h1: libmnl
+	cd $(TOP)/ipset-6.29 && CC=$(CC) STRIP=$(STRIP)  && ./autogen.sh && \
 	CFLAGS="-Os -Wall $(EXTRACFLAGS) -ffunction-sections -fdata-sections" \
 	LDFLAGS="-ffunction-sections -fdata-sections -Wl,--gc-sections" \
 	libmnl_CFLAGS="-I$(TOP)/libmnl/staged/usr/include" \
 	libmnl_LIBS="-L$(TOP)/libmnl/staged/usr/lib -lmnl" \
+	ksourcedir="$(LINUXDIR)" \
 	$(CONFIGURE) --prefix=/usr --with-kmod=no
-	touch ipset/stamp-h1
+	touch ipset-6.29/stamp-h1
 
-ipset: ipset/stamp-h1
-	$(MAKE) -C ipset
+ipset6: ipset6/stamp-h1
+	$(MAKE) -C ipset-6.29
+	#$(MAKE) IP_SET_MAX=512 -C ipset-6.29 KERNEL_DIR=$(LINUXDIR) modules
 
-ipset-install: ipset
-	install -D ipset/src/ipset $(INSTALLDIR)/ipset/usr/sbin/ipset
-	install -d $(INSTALLDIR)/ipset/usr/lib/
-	install ipset/lib/.libs/libipset.so.3.6.0 $(INSTALLDIR)/ipset/usr/lib/libipset.so.3.6.0
-	$(STRIP) $(INSTALLDIR)/ipset/usr/lib/libipset.so.3.6.0
-	$(STRIP) $(INSTALLDIR)/ipset/usr/sbin/ipset
-	cd $(INSTALLDIR)/ipset/usr/lib/ && \
+ipset6-install: ipset6
+	install -D ipset-6.29/src/ipset $(INSTALLDIR)/ipset6/usr/sbin/ipset
+	install -d $(INSTALLDIR)/ipset6/usr/lib/
+	install ipset-6.29/lib/.libs/libipset.so.3.6.0 $(INSTALLDIR)/ipset6/usr/lib/libipset.so.3.6.0
+	$(STRIP) $(INSTALLDIR)/ipset6/usr/lib/libipset.so.3.6.0
+	$(STRIP) $(INSTALLDIR)/ipset6/usr/sbin/ipset
+	cd $(INSTALLDIR)/ipset6/usr/lib/ && \
 		ln -sf libipset.so.3.6.0 libipset.so.3 && \
 		ln -sf libipset.so.3.6.0 libipset.so
 
-ipset-clean:
-	-@$(MAKE) -C ipset clean
-	-@rm -rf ipset/Makefile ipset/stamp-h1
+ipset6-clean:
+	-@$(MAKE) -C ipset-6.29 clean
+	-@rm -rf ipset-6.29/Makefile ipset-6.29/stamp-h1
+
+#ipset 4.5
+ipset: libmnl
+	$(MAKE) -C ipset-4.5 KERNEL_DIR=$(LINUXDIR) binaries $(PARALLEL_BUILD) 
+
+#ipset 4.5
+ipset-install: ipset
+	install -D ipset-4.5/ipset $(INSTALLDIR)/ipset/usr/sbin/ipset
+	install -d $(INSTALLDIR)/ipset/usr/lib/
+	install ipset-4.5/*.so $(INSTALLDIR)/ipset/usr/lib/
+	$(STRIP) $(INSTALLDIR)/ipset/usr/lib/*.so
+	$(STRIP) $(INSTALLDIR)/ipset/usr/sbin/ipset
 
 libjson-c/stamp-h1:
 	cd $(TOP)/libjson-c && CC=$(CC) STRIP=$(CROSS_COMPILE)strip \

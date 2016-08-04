@@ -30,8 +30,10 @@ export ac_cv_func_malloc_0_nonnull=yes
 export SRCBASE := $(shell pwd)
 export SRCBASEDIR := $(shell pwd | sed 's/.*release\///g')
 RELEASEDIR := $(shell (cd $(SRCBASE)/.. && pwd -P))
-PATH := $(RELEASEDIR)/tools:$(PATH)
+#PATH := $(RELEASEDIR)/tools:$(PATH)
 export TPROFILE := N
+
+PATH := $(RELEASEDIR)/tools:$(SRCBASE)/ctools:$(SRCBASE)/toolchains/hndtools-arm-linux-2.6.36-uclibc-4.5.3/bin:$(PATH)
 
 include ./target.mak
 
@@ -248,7 +250,7 @@ cleantools:
 	@$(MAKE) -C ctools clean
 
 cleankernel:
-	@cd $(LINUXDIR) && \
+	-@cd $(LINUXDIR) && \
 	mv .config save-config && \
 	$(MAKE) distclean || true; \
 	cp -p save-config .config || true
@@ -973,7 +975,7 @@ o:
 	@$(MAKE) bin OPENVPN=y NTFS=y BBEXTRAS=y USBEXTRAS=y EBTABLES=y MEDIASRV=y IPV6SUPP=y MULTIWAN=y B=E BUILD_DESC="Custom" CTF=y GRO=y USB="USB" NOCAT=y BTCLIENT=y TR_EXTRAS=y DNSCRYPT=y PPTPD=y DNSSEC=y SNMP=y TINC=y TOR=y
 
 z:
-	@$(MAKE) bin OPENVPN=y NTFS=y BBEXTRAS=y USBEXTRAS=y EBTABLES=y MEDIASRV=y IPV6SUPP=y MULTIWAN=y B=E BUILD_DESC="AIO" CTF=y GRO=y USB="USB" NOCAT=y BTCLIENT=y TR_EXTRAS=y DNSCRYPT=y UPS=y PPTPD=y DNSSEC=y TINC=y SNMP=y RAID=y NFS=y NANO=y TOR=y NGINX=y
+	@$(MAKE) bin OPENVPN=y NTFS=y BBEXTRAS=y USBEXTRAS=y EBTABLES=y MEDIASRV=y IPV6SUPP=y MULTIWAN=y B=E BUILD_DESC="AIO" CTF=y GRO=y USB="USB" NOCAT=y BTCLIENT=y TR_EXTRAS=y DNSCRYPT=y UPS=y PPTPD=y DNSSEC=y TINC=y SNMP=y RAID=y NFS=y NANO=y TOR=y NGINX=y IPSEC=y
 
 ac68e:
 	@$(MAKE) e ARM=y NVRAM_64K=y NAND=y BCMSMP=y ASUS_TRX="ASUS" TUXERA=y
@@ -1125,6 +1127,12 @@ endif
 	@echo "cleankernel  -C Linux distclean (but preserves .config)"
 	@echo "distclean    distclean of Linux & busybox (but preserve .configs)"
 	@echo "prepk        -C Linux oldconfig dep"
-	
+
+libmnl ipset6 busybox cyassl dnscrypt dnsmasq e2fsprogs hotplug2 httpd iptables-1.4.x layer7 libbcm libbcmcrypto libcurl libevent libexif libid3tag libjson-c libncurses libnfnetlink libnfsidmap  libsodium libusb libxml2 minidlna miniupnpd mysql nano nas_arm nettle nfs-utils nginx ntfs-3g openssl php portmap pppd rp-pppoe rstats samba samba-3.5.8 samba3 sqlite transmission udpxy usbmodeswitch vlan vsftpd xl2tpd:
+	@$(MAKE) -C router $@
+
 .PHONY: all clean distclean cleanimage cleantools cleankernel prepk what setprofile help
 .PHONY: a b c d m nc Makefile allversions tomato_profile.mak
+
+wtest:
+	tttest="sfsfef" ; echo $${tttest};
