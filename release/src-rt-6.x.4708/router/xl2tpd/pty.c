@@ -41,7 +41,7 @@
 #define PTY01 "0123456789abcdef"
 #endif
 
-#ifdef FREEBSD
+#if defined(FREEBSD) || defined(NETBSD)
 #define PTY00 "/dev/ptyXX"
 #define PTY10 "p"
 #define PTY01 "0123456789abcdefghijklmnopqrstuv"
@@ -87,14 +87,7 @@ int getPtyMaster_ptmx(char *ttybuf, int ttybuflen)
 	return -EINVAL;
     }
 
-    /* change the onwership */
-    if (grantpt(fd))
-    {
-	l2tp_log (LOG_WARNING, "%s: unable to grantpt() on pty\n",
-		  __FUNCTION__);
-	close(fd);
-	return -EINVAL;
-    }
+    /* No need to call grantpt */
 
     if (unlockpt(fd))
     {
