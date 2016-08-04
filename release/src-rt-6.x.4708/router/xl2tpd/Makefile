@@ -112,7 +112,7 @@ BINDIR?=$(DESTDIR)${PREFIX}/bin
 MANDIR?=$(DESTDIR)${PREFIX}/share/man
 
 
-all: $(EXEC) pfc $(CONTROL_EXEC)
+all: $(EXEC) $(CONTROL_EXEC)
 
 clean:
 	rm -f $(OBJS) $(EXEC) pfc.o pfc $(CONTROL_EXEC)
@@ -130,7 +130,7 @@ pfc:
 romfs:
 	$(ROMFSINST) /bin/$(EXEC)
 
-install: ${EXEC} pfc ${CONTROL_EXEC}
+install: ${EXEC} ${CONTROL_EXEC}
 	install -d -m 0755 ${SBINDIR}
 	install -m 0755 $(EXEC) ${SBINDIR}/$(EXEC)
 	install -d -m 0755 ${MANDIR}/man5
@@ -140,10 +140,10 @@ install: ${EXEC} pfc ${CONTROL_EXEC}
 	install -m 0644 doc/xl2tpd.conf.5 doc/l2tp-secrets.5 \
 		 ${MANDIR}/man5/
 	# pfc
-	install -d -m 0755 ${BINDIR}
-	install -m 0755 pfc ${BINDIR}/pfc
-	install -d -m 0755 ${MANDIR}/man1
-	install -m 0644 contrib/pfc.1 ${MANDIR}/man1/
+	#install -d -m 0755 ${BINDIR}
+	#install -m 0755 pfc ${BINDIR}/pfc
+	#install -d -m 0755 ${MANDIR}/man1
+	#install -m 0644 contrib/pfc.1 ${MANDIR}/man1/
 	# control exec
 	install -d -m 0755 ${SBINDIR}
 	install -m 0755 $(CONTROL_EXEC) ${SBINDIR}/$(CONTROL_EXEC)

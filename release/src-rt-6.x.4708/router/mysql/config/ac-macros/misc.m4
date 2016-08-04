@@ -477,7 +477,7 @@ AC_DEFUN([MYSQL_STACK_DIRECTION],
     exit(ptr_f(&a) < 0);
   }
   ], ac_cv_c_stack_direction=1, ac_cv_c_stack_direction=-1,
-   ac_cv_c_stack_direction=)])
+   ac_cv_c_stack_direction=0)])
  AC_DEFINE_UNQUOTED(STACK_DIRECTION, $ac_cv_c_stack_direction)
 ])dnl
 
