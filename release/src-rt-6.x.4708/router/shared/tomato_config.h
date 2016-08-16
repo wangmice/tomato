@@ -13,6 +13,9 @@
 #define TCONFIG_PPTPD 1
   #define IF_TCONFIG_PPTPD(...) __VA_ARGS__
   #define IF_NOT_TCONFIG_PPTPD(...)
+#define TCONFIG_MULTIWAN 1
+  #define IF_TCONFIG_MULTIWAN(...) __VA_ARGS__
+  #define IF_NOT_TCONFIG_MULTIWAN(...)
 #define TCONFIG_HTTPS 1
   #define IF_TCONFIG_HTTPS(...) __VA_ARGS__
   #define IF_NOT_TCONFIG_HTTPS(...)
@@ -61,6 +64,9 @@
 #define TCONFIG_NOCAT 1
   #define IF_TCONFIG_NOCAT(...) __VA_ARGS__
   #define IF_NOT_TCONFIG_NOCAT(...)
+#define TCONFIG_NGINX 1
+  #define IF_TCONFIG_NGINX(...) __VA_ARGS__
+  #define IF_NOT_TCONFIG_NGINX(...)
 #define TCONFIG_MEDIA_SERVER 1
   #define IF_TCONFIG_MEDIA_SERVER(...) __VA_ARGS__
   #define IF_NOT_TCONFIG_MEDIA_SERVER(...)
@@ -91,12 +97,12 @@
 #define TCONFIG_TR_EXTRAS 1
   #define IF_TCONFIG_TR_EXTRAS(...) __VA_ARGS__
   #define IF_NOT_TCONFIG_TR_EXTRAS(...)
-#undef TCONFIG_NFS
-  #define IF_TCONFIG_NFS(...)
-  #define IF_NOT_TCONFIG_NFS(...) __VA_ARGS__
-#undef TCONFIG_SNMP
-  #define IF_TCONFIG_SNMP(...)
-  #define IF_NOT_TCONFIG_SNMP(...) __VA_ARGS__
+#define TCONFIG_NFS 1
+  #define IF_TCONFIG_NFS(...) __VA_ARGS__
+  #define IF_NOT_TCONFIG_NFS(...)
+#define TCONFIG_SNMP 1
+  #define IF_TCONFIG_SNMP(...) __VA_ARGS__
+  #define IF_NOT_TCONFIG_SNMP(...)
 #undef TCONFIG_SDHC
   #define IF_TCONFIG_SDHC(...)
   #define IF_NOT_TCONFIG_SDHC(...) __VA_ARGS__
@@ -106,21 +112,27 @@
 #define TCONFIG_UPS 1
   #define IF_TCONFIG_UPS(...) __VA_ARGS__
   #define IF_NOT_TCONFIG_UPS(...)
+#define TCONFIG_NANO 1
+  #define IF_TCONFIG_NANO(...) __VA_ARGS__
+  #define IF_NOT_TCONFIG_NANO(...)
 #define TCONFIG_DNSCRYPT 1
   #define IF_TCONFIG_DNSCRYPT(...) __VA_ARGS__
   #define IF_NOT_TCONFIG_DNSCRYPT(...)
 #define TCONFIG_NVRAM_64K 1
   #define IF_TCONFIG_NVRAM_64K(...) __VA_ARGS__
   #define IF_NOT_TCONFIG_NVRAM_64K(...)
+#undef TCONFIG_NVRAM_128K
+  #define IF_TCONFIG_NVRAM_128K(...)
+  #define IF_NOT_TCONFIG_NVRAM_128K(...) __VA_ARGS__
 #define TCONFIG_TOR 1
   #define IF_TCONFIG_TOR(...) __VA_ARGS__
   #define IF_NOT_TCONFIG_TOR(...)
-#undef TCONFIG_IPSEC
-  #define IF_TCONFIG_IPSEC(...)
-  #define IF_NOT_TCONFIG_IPSEC(...) __VA_ARGS__
-#undef TCONFIG_RAID
-  #define IF_TCONFIG_RAID(...)
-  #define IF_NOT_TCONFIG_RAID(...) __VA_ARGS__
+#define TCONFIG_IPSEC 1
+  #define IF_TCONFIG_IPSEC(...) __VA_ARGS__
+  #define IF_NOT_TCONFIG_IPSEC(...)
+#define TCONFIG_RAID 1
+  #define IF_TCONFIG_RAID(...) __VA_ARGS__
+  #define IF_NOT_TCONFIG_RAID(...)
 #undef TCONFIG_MICROSD
   #define IF_TCONFIG_MICROSD(...)
   #define IF_NOT_TCONFIG_MICROSD(...) __VA_ARGS__
@@ -133,9 +145,18 @@
 #define TCONFIG_CTF 1
   #define IF_TCONFIG_CTF(...) __VA_ARGS__
   #define IF_NOT_TCONFIG_CTF(...)
-#define TCONFIG_UFSD 1
-  #define IF_TCONFIG_UFSD(...) __VA_ARGS__
-  #define IF_NOT_TCONFIG_UFSD(...)
+#define TCONFIG_NAND 1
+  #define IF_TCONFIG_NAND(...) __VA_ARGS__
+  #define IF_NOT_TCONFIG_NAND(...)
+#undef TCONFIG_UFSDA
+  #define IF_TCONFIG_UFSDA(...)
+  #define IF_NOT_TCONFIG_UFSDA(...) __VA_ARGS__
+#undef TCONFIG_UFSDN
+  #define IF_TCONFIG_UFSDN(...)
+  #define IF_NOT_TCONFIG_UFSDN(...) __VA_ARGS__
+#undef TCONFIG_TUXERA
+  #define IF_TCONFIG_TUXERA(...)
+  #define IF_NOT_TCONFIG_TUXERA(...) __VA_ARGS__
 #define TCONFIG_BCMARM 1
   #define IF_TCONFIG_BCMARM(...) __VA_ARGS__
   #define IF_NOT_TCONFIG_BCMARM(...)
@@ -148,6 +169,18 @@
 #define TCONFIG_BCMSMP 1
   #define IF_TCONFIG_BCMSMP(...) __VA_ARGS__
   #define IF_NOT_TCONFIG_BCMSMP(...)
+#define TCONFIG_GROCTRL 1
+  #define IF_TCONFIG_GROCTRL(...) __VA_ARGS__
+  #define IF_NOT_TCONFIG_GROCTRL(...)
 #undef TCONFIG_BCMFA
   #define IF_TCONFIG_BCMFA(...)
   #define IF_NOT_TCONFIG_BCMFA(...) __VA_ARGS__
+#define TCONFIG_DNSSEC 1
+  #define IF_TCONFIG_DNSSEC(...) __VA_ARGS__
+  #define IF_NOT_TCONFIG_DNSSEC(...)
+#define TCONFIG_TINC 1
+  #define IF_TCONFIG_TINC(...) __VA_ARGS__
+  #define IF_NOT_TCONFIG_TINC(...)
+#undef TCONFIG_FANCTRL
+  #define IF_TCONFIG_FANCTRL(...)
+  #define IF_NOT_TCONFIG_FANCTRL(...) __VA_ARGS__
