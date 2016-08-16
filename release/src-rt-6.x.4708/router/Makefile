@@ -2116,7 +2116,7 @@ libncurses: libncurses/stamp-h1
 
 libncurses-clean:
 	-@$(MAKE) -C libncurses clean
-	@rm -f libncurses/stamp-h1 libncurses/Makefile
+	-@rm -f libncurses/stamp-h1 libncurses/Makefile
 	@rm -rf libncurses/staged
 
 libncurses-install: libncurses
@@ -2146,16 +2146,12 @@ libncurses-install: libncurses
 
 mysql/stamp-h1: openssl zlib libncurses
 	@$(SEP)
-	cd mysql && cp -f configure.arm configure && \
-	CFLAGS="-O2 -Wall -fno-delete-null-pointer-checks -funit-at-a-time --param large-function-growth=800 \
-		--param max-inline-insns-single=3000 -ffunction-sections -fdata-sections -I$(TOP)/zlib \
-		-I$(TOP)/openssl/include -I$(TOP)/libncurses/include" \
-	CPPFLAGS="-O2 -Wall -fno-delete-null-pointer-checks -funit-at-a-time --param large-function-growth=800 \
-		--param max-inline-insns-single=3000 -ffunction-sections -fdata-sections -I$(TOP)/zlib \
-		-I$(TOP)/openssl/include -I$(TOP)/libncurses/include" \
-	LDFLAGS="-L$(TOP)/openssl -L$(TOP)/zlib/staged/usr/lib -L$(TOP)/libncurses/lib -fPIC -EL" \
-	LIBS="-lcrypt -lz -lstdc++ -lssl -lcrypto -lncurses" \
-	$(CONFIGURE) --host=$(HOST) --build=x86_64-linux-gnu  --prefix=/usr \
+	cd mysql && CC=$(CC) && cp -f configure.arm configure && \
+	CFLAGS="-O2 -Wall -fno-delete-null-pointer-checks -funit-at-a-time  --param large-function-growth=800 --param max-inline-insns-single=3000 -ffunction-sections -fdata-sections -I$(TOP)/zlib -I$(TOP)/openssl/include -I$(TOP)/libncurses/include -L$(TOP)/libncurses/lib -L$(TOP)/libncurses/staged/usr/lib" && \
+	export CPPFLAGS="-O2 -Wall -fno-delete-null-pointer-checks -funit-at-a-time --param large-function-growth=800 --param max-inline-insns-single=3000 -ffunction-sections -fdata-sections -I$(TOP)/zlib -I$(TOP)/openssl/include -I$(TOP)/libncurses/include -L$(TOP)/libncurses/lib -L$(TOP)/libncurses/staged/usr/lib" && \
+	export LDFLAGS="-L$(TOP)/openssl -L$(TOP)/zlib/staged/usr/lib -L$(TOP)/libncurses/lib -L$(TOP)/libncurses/staged/usr/lib -fPIC" && \
+	LIBS="-lcrypt -lz -lstdc++ -lssl -lcrypto -lncurses" && export ac_cv_c_stack_direction="-1" && \
+	$(CONFIGURE) --host=$(HOST) --prefix=/usr \
 		--without-debug --without-docs --without-man --with-charset=utf8 --with-extra-charsets=ascii,latin1,gb2312,gbk \
 		--enable-shared --disable-static \
 		--without-mysqlmanager \
