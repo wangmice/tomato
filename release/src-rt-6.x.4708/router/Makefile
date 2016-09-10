@@ -2820,7 +2820,7 @@ ipset6/stamp-h1: libmnl
 
 ipset6: ipset6/stamp-h1
 	$(MAKE) -C ipset-6.29
-	#$(MAKE) IP_SET_MAX=512 -C ipset-6.29 KERNEL_DIR=$(LINUXDIR) modules
+	$(MAKE) IP_SET_MAX=512 -C ipset-6.29 KERNEL_DIR=$(LINUXDIR) modules
 
 ipset6-install: ipset6
 	install -D ipset-6.29/src/ipset $(INSTALLDIR)/ipset6/usr/sbin/ipset
