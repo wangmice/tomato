@@ -31,3 +31,7 @@ ifneq ($(TCONFIG_DNSCRYPT),y)
 else
 	-wget https://raw.githubusercontent.com/jedisct1/dnscrypt-proxy/master/dnscrypt-resolvers.csv -O $(INSTALLDIR)/rom/etc/dnscrypt-resolvers.csv
 endif
+
+ifneq ($(TCONFIG_BCMARM),y)
+	rm -f $(INSTALLDIR)/rom/etc/modprobe.conf
+endif

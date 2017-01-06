@@ -136,9 +136,12 @@
 #undef TCONFIG_MICROSD
   #define IF_TCONFIG_MICROSD(...)
   #define IF_NOT_TCONFIG_MICROSD(...) __VA_ARGS__
-#undef TCONFIG_USBAP
-  #define IF_TCONFIG_USBAP(...)
-  #define IF_NOT_TCONFIG_USBAP(...) __VA_ARGS__
+#define TCONFIG_USBAP 1
+  #define IF_TCONFIG_USBAP(...) __VA_ARGS__
+  #define IF_NOT_TCONFIG_USBAP(...)
+#undef TCONFIG_REMOVE_USBAPP
+  #define IF_TCONFIG_REMOVE_USBAPP(...)
+  #define IF_NOT_TCONFIG_REMOVE_USBAPP(...) __VA_ARGS__
 #undef TCONFIG_AC66U
   #define IF_TCONFIG_AC66U(...)
   #define IF_NOT_TCONFIG_AC66U(...) __VA_ARGS__
