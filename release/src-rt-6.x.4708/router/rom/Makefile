@@ -36,3 +36,6 @@ ifeq ($(TCONFIG_AIO),y)
 #	Used by Curl
 	cp -f others/cacert.pem $(INSTALLDIR)/rom/cacert.pem
 endif
+ifneq ($(TCONFIG_BCMARM),y)
+	rm -f $(INSTALLDIR)/rom/etc/modprobe.conf
+endif

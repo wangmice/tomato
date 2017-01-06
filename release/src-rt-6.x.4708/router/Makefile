@@ -23,7 +23,7 @@ export PARALLEL_BUILD := -j`grep -c '^processor' /proc/cpuinfo`
 #
 SEP=echo "\033[41;1m   $@   \033[0m"
 #ipset_ver:ipset或ipset6二选一
-IPSET_VER := ipset
+IPSET_VER := ipset6
 export CFLAGS += -DBCMWPA2
 ifeq ($(TCONFIG_BCMWL6),y)
 export CFLAGS += -DBCMQOS
@@ -79,6 +79,7 @@ obj-y += ntpc
 obj-y += rstats
 obj-y += cstats
 obj-y += udpxy
+obj-y += libpcap
 
 ifneq ($(TCONFIG_TOR)$(TCONFIG_MEDIA_SERVER)$(TCONFIG_BBT),)
 obj-y += zlib
@@ -1324,9 +1325,9 @@ pptpd-clean:
 pppd/Makefile: pppd/linux/Makefile.top
 	cd pppd && ksrc=$(LINUXDIR) && $(CONFIGURE) --prefix=/usr --sysconfdir=/tmp
 
-pppd: pppd/Makefile
+pppd: pppd/Makefile kernel_header
 	@$(SEP)
-	@$(MAKE) -C pppd KERNELDIR=$(LINUXDIR) MFLAGS='$(if $(TCONFIG_IPV6),HAVE_INET6=y,) EXTRACFLAGS="$(EXTRACFLAGS)"'
+	@$(MAKE) -C pppd KERNELDIR=$(LINUXDIR) MFLAGS='$(if $(TCONFIG_IPV6),HAVE_INET6=y,) EXTRACFLAGS="$(EXTRACFLAGS) "'
 
 pppd-clean:
 	-@$(MAKE) -C pppd clean
@@ -1341,6 +1342,25 @@ ifeq ($(TCONFIG_L2TP),y)
 	install -D pppd/pppd/plugins/pppol2tp/pppol2tp.so $(INSTALLDIR)/pppd/usr/lib/pppd/pppol2tp.so
 	$(STRIP) $(INSTALLDIR)/pppd/usr/lib/pppd/*.so
 endif
+
+libpcap: libpcap/Makefile
+	@$(SEP)
+	@$(MAKE) -C libpcap 
+
+libpcap/Makefile: 
+	cd libpcap && CFLAGS="-g -O2 -ffunction-sections -fdata-sections $(EXTRACFLAGS) "  \
+	 KDIR=$(LINUXDIR) $(CONFIGURE) --disable-yydebug --with-pcap=linux --without-septel \
+	--without-dag --without-libnl --without-snf --disable-can  --disable-canusb  --disable-dbus 
+
+libpcap-clean:
+	-@$(MAKE) -C libpcap clean
+	@rm -f libpcap/Makefile
+
+libpcap-install: libpcap
+	install -D libpcap/libpcap.so.1.8.1 $(INSTALLDIR)/libpcap/usr/lib/libpcap.so.1.8.1
+	$(STRIP) $(INSTALLDIR)/libpcap/usr/lib/libpcap.so.1.8.1
+	cd $(INSTALLDIR)/libpcap/usr/lib && \
+		ln -sf libpcap.so.1.8.1 libpcap.so.1 && ln -sf libpcap.so.1.8.1 libpcap.so
 
 #	ipupdate-install:
 #		install -D ipupdate/ez-ipupdate $(INSTALLDIR)/ipupdate/usr/sbin/ez-ipupdate
@@ -2797,35 +2817,35 @@ libmnl: libmnl/stamp-h1
 
 libmnl-install: libmnl
 	install -d $(INSTALLDIR)/libmnl/usr/lib/
-	install libmnl/src/.libs/libmnl.so.0.1.0 $(INSTALLDIR)/libmnl/usr/lib/libmnl.so.0.1.0
-	$(STRIP) $(INSTALLDIR)/libmnl/usr/lib/libmnl.so.0.1.0
+	install libmnl/src/.libs/libmnl.so.0.2.0 $(INSTALLDIR)/libmnl/usr/lib/libmnl.so.0.2.0
+	$(STRIP) $(INSTALLDIR)/libmnl/usr/lib/libmnl.so.0.2.0
 	cd $(INSTALLDIR)/libmnl/usr/lib/ && \
-		ln -sf libmnl.so.0.1.0 libmnl.so.0 && \
-		ln -sf libmnl.so.0.1.0 libmnl.so
+		ln -sf libmnl.so.0.2.0 libmnl.so.0 && \
+		ln -sf libmnl.so.0.2.0 libmnl.so
 
 libmnl-clean:
 	-@$(MAKE) -C libmnl clean
 	-@rm -rf libmnl/staged
 
-# --with-kmod=no--with-kbuild="$(LINUXDIR)"autoreconf &&
+# --with-kmod=no --with-kbuild="$(LINUXDIR)" autoreconf &&--with-kmod=yes
 ipset6/stamp-h1: libmnl
-	cd $(TOP)/ipset-6.29 && CC=$(CC) STRIP=$(STRIP)  && ./autogen.sh && \
+	cd $(TOP)/ipset && CC=$(CC) STRIP=$(STRIP)  && autoreconf -i -f && \
 	CFLAGS="-Os -Wall $(EXTRACFLAGS) -ffunction-sections -fdata-sections" \
 	LDFLAGS="-ffunction-sections -fdata-sections -Wl,--gc-sections" \
 	libmnl_CFLAGS="-I$(TOP)/libmnl/staged/usr/include" \
-	libmnl_LIBS="-L$(TOP)/libmnl/staged/usr/lib -lmnl" \
+	libmnl_LIBS="-L$(TOP)/libmnl/staged/usr/lib -l:libmnl.so" \
 	ksourcedir="$(LINUXDIR)" \
 	$(CONFIGURE) --prefix=/usr --with-kmod=no
-	touch ipset-6.29/stamp-h1
+	touch ipset/stamp-h1
 
 ipset6: ipset6/stamp-h1
-	$(MAKE) -C ipset-6.29
-	$(MAKE) IP_SET_MAX=512 -C ipset-6.29 KERNEL_DIR=$(LINUXDIR) modules
+	$(MAKE) -C ipset
+	$(MAKE) IP_SET_MAX=512 -C ipset KERNEL_DIR=$(LINUXDIR) modules
 
 ipset6-install: ipset6
-	install -D ipset-6.29/src/ipset $(INSTALLDIR)/ipset6/usr/sbin/ipset
+	install -D ipset/src/ipset $(INSTALLDIR)/ipset6/usr/sbin/ipset
 	install -d $(INSTALLDIR)/ipset6/usr/lib/
-	install ipset-6.29/lib/.libs/libipset.so.3.6.0 $(INSTALLDIR)/ipset6/usr/lib/libipset.so.3.6.0
+	install ipset/lib/.libs/libipset.so.3.6.0 $(INSTALLDIR)/ipset6/usr/lib/libipset.so.3.6.0
 	$(STRIP) $(INSTALLDIR)/ipset6/usr/lib/libipset.so.3.6.0
 	$(STRIP) $(INSTALLDIR)/ipset6/usr/sbin/ipset
 	cd $(INSTALLDIR)/ipset6/usr/lib/ && \
@@ -2833,18 +2853,18 @@ ipset6-install: ipset6
 		ln -sf libipset.so.3.6.0 libipset.so
 
 ipset6-clean:
-	-@$(MAKE) -C ipset-6.29 clean
-	-@rm -rf ipset-6.29/Makefile ipset-6.29/stamp-h1
+	-@$(MAKE) -C ipset clean
+	-@rm -rf ipset/Makefile ipset/stamp-h1
 
 #ipset 4.5
 ipset: libmnl
-	$(MAKE) -C ipset-4.5 KERNEL_DIR=$(LINUXDIR) binaries $(PARALLEL_BUILD) 
+	$(MAKE) -C ipset KERNEL_DIR=$(LINUXDIR) binaries $(PARALLEL_BUILD) 
 
 #ipset 4.5
 ipset-install: ipset
-	install -D ipset-4.5/ipset $(INSTALLDIR)/ipset/usr/sbin/ipset
+	install -D ipset/ipset $(INSTALLDIR)/ipset/usr/sbin/ipset
 	install -d $(INSTALLDIR)/ipset/usr/lib/
-	install ipset-4.5/*.so $(INSTALLDIR)/ipset/usr/lib/
+	install ipset/*.so $(INSTALLDIR)/ipset/usr/lib/
 	$(STRIP) $(INSTALLDIR)/ipset/usr/lib/*.so
 	$(STRIP) $(INSTALLDIR)/ipset/usr/sbin/ipset
 
