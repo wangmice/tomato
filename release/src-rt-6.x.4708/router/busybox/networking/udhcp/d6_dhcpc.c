@@ -793,13 +793,22 @@ static void perform_renew(void)
 static void perform_d6_release(struct in6_addr *server_ipv6, struct in6_addr *our_cur_ipv6)
 {
 	/* send release packet */
-	if (state == BOUND || state == RENEWING || state == REBINDING) {
+	if (state == BOUND
+	 || state == RENEWING
+	 || state == REBINDING
+	 || state == RENEW_REQUESTED
+	) {
 		bb_error_msg("unicasting a release");
 		send_d6_release(server_ipv6, our_cur_ipv6); /* unicast */
-		d6_run_script(NULL, "deconfig");
 	}
 	bb_error_msg("entering released state");
-
+/*
+ * We can be here on: SIGUSR2,
+ * or on exit (SIGTERM) and -R "release on quit" is specified.
+ * Users requested to be notified in all cases, even if not in one
+ * of the states above.
+ */
+	d6_run_script(NULL, "deconfig");
 	change_listen_mode(LISTEN_NONE);
 	state = RELEASED;
 }
@@ -999,7 +1008,8 @@ int udhcpc6_main(int argc UNUSED_PARAM, char **argv)
 	if (udhcp_read_interface(client_config.interface,
 			&client_config.ifindex,
 			NULL,
-			client_config.client_mac)
+			client_config.client_mac,
+			NULL)
 	) {
 		return 1;
 	}
@@ -1102,7 +1112,8 @@ int udhcpc6_main(int argc UNUSED_PARAM, char **argv)
 			if (udhcp_read_interface(client_config.interface,
 					&client_config.ifindex,
 					NULL,
-					client_config.client_mac)
+					client_config.client_mac,
+					NULL)
 			) {
 				goto ret0; /* iface is gone? */
 			}

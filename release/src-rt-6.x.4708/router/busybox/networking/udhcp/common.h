@@ -1,4 +1,4 @@
-    /* vi: set sw=4 ts=4: */
+/* vi: set sw=4 ts=4: */
 /*
  * Russ Dill <Russ.Dill@asu.edu> September 2001
  * Rewritten by Vladimir Oleynik <dzo@simtreas.ru> (C) 2003
@@ -74,8 +74,6 @@ struct BUG_bad_sizeof_struct_ip_udp_dhcp_packet {
 	char c[IP_UDP_DHCP_SIZE == 576 ? 1 : -1];
 };
 
-extern int minpkt;	// zzz
-
 
 /*** Options ***/
 
@@ -94,7 +92,9 @@ enum {
 	OPTION_S32,
 	OPTION_BIN,
 	OPTION_STATIC_ROUTES,
+#if ENABLE_FEATURE_UDHCP_RFC5969
 	OPTION_6RD,
+#endif
 #if ENABLE_FEATURE_UDHCP_RFC3397
 	OPTION_DNS_STRING,  /* RFC1035 compressed domain name list */
 	OPTION_SIP_SERVERS,
@@ -305,7 +305,8 @@ void udhcp_sp_setup(void) FAST_FUNC;
 int udhcp_sp_fd_set(fd_set *rfds, int extra_fd) FAST_FUNC;
 int udhcp_sp_read(const fd_set *rfds) FAST_FUNC;
 
-int udhcp_read_interface(const char *interface, int *ifindex, uint32_t *nip, uint8_t *mac, uint16_t *mtu) FAST_FUNC;
+int udhcp_read_interface(const char *interface, int *ifindex,
+		uint32_t *nip, uint8_t *mac, uint16_t *mtu) FAST_FUNC;
 
 int udhcp_listen_socket(/*uint32_t ip,*/ int port, const char *inf) FAST_FUNC;
 

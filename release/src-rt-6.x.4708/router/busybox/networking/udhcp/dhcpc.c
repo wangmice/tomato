@@ -25,15 +25,9 @@
 #include "dhcpd.h"
 #include "dhcpc.h"
 
-#include <asm/types.h>
-/*#if (defined(__GLIBC__) && __GLIBC__ >= 2 && __GLIBC_MINOR__ >= 1) || defined(_NEWLIB_VERSION)
-# include <linux/if_packet.h>
-# include <netinet/if_ether.h>
-#else */
-# include <linux/if_packet.h>
-# include <linux/if_ether.h>
-/*#endif*/
+#include <netinet/if_ether.h>
 #include <linux/filter.h>
+#include <linux/if_packet.h>
 
 #ifndef PACKET_AUXDATA
 # define PACKET_AUXDATA 8
@@ -66,7 +60,6 @@ static const char udhcpc_longopts[] ALIGN1 =
 	"request\0"        Required_argument "r"
 	"script\0"         Required_argument "s"
 	"timeout\0"        Required_argument "T"
-	"version\0"        No_argument       "v"
 	"retries\0"        Required_argument "t"
 	"tryagain\0"       Required_argument "A"
 	"syslog\0"         No_argument       "S"
@@ -102,9 +95,8 @@ enum {
 	OPT_x = 1 << 18,
 	OPT_f = 1 << 19,
 	OPT_B = 1 << 20,
-	OPT_m = 1 << 21,	// zzz
 /* The rest has variable bit positions, need to be clever */
-	OPTBIT_LAST = 21,
+	OPTBIT_B = 20,
 	USE_FOR_MMU(             OPTBIT_b,)
 	IF_FEATURE_UDHCPC_ARPING(OPTBIT_a,)
 	IF_FEATURE_UDHCP_PORT(   OPTBIT_P,)
@@ -121,7 +113,9 @@ static const uint8_t len_of_option_as_string[] ALIGN1 = {
 	[OPTION_IP              ] = sizeof("255.255.255.255 "),
 	[OPTION_IP_PAIR         ] = sizeof("255.255.255.255 ") * 2,
 	[OPTION_STATIC_ROUTES   ] = sizeof("255.255.255.255/32 255.255.255.255 "),
-	[OPTION_6RD             ] = sizeof("132 128 FFFF:FFFF:FFFF:FFFF:FFFF:FFFF:FFFF:FFFF 255.255.255.255 "),
+#if ENABLE_FEATURE_UDHCP_RFC5969
+	[OPTION_6RD             ] = sizeof("132 128 ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff 255.255.255.255 "),
+#endif
 	[OPTION_STRING          ] = 1,
 	[OPTION_STRING_HOST     ] = 1,
 #if ENABLE_FEATURE_UDHCP_RFC3397
@@ -319,6 +313,7 @@ static NOINLINE char *xmalloc_optname_optval(uint8_t *option, const struct dhcp_
 
 			return ret;
 		}
+#if ENABLE_FEATURE_UDHCP_RFC5969
 		case OPTION_6RD:
 			/* Option binary format (see RFC 5969):
 			 *  0                   1                   2                   3
@@ -366,6 +361,7 @@ static NOINLINE char *xmalloc_optname_optval(uint8_t *option, const struct dhcp_
 			}
 
 			return ret;
+#endif
 #if ENABLE_FEATURE_UDHCP_RFC3397
 		case OPTION_DNS_STRING:
 			/* unpack option into dest; use ret for prefix (i.e., "optname=") */
@@ -616,9 +612,9 @@ static void add_client_options(struct dhcp_packet *packet)
 	int i, end, len;
 
 	len = sizeof(struct ip_udp_dhcp_packet);
-	if (client_config.client_mtu == 0 ||
-	    client_config.client_mtu > len)
-		udhcp_add_simple_option(packet, DHCP_MAX_SIZE, htons(len));
+	if (client_config.client_mtu > 0)
+		len = MIN(client_config.client_mtu, len);
+	udhcp_add_simple_option(packet, DHCP_MAX_SIZE, htons(len));
 
 	/* Add a "param req" option with the list of options we'd like to have
 	 * from stubborn DHCP servers. Pull the data from the struct in common.c.
@@ -643,10 +639,6 @@ static void add_client_options(struct dhcp_packet *packet)
 		udhcp_add_binary_option(packet, client_config.hostname);
 	if (client_config.fqdn)
 		udhcp_add_binary_option(packet, client_config.fqdn);
-
-	/* Request broadcast replies if we have no IP addr */
-	if ((option_mask32 & OPT_B) && packet->ciaddr == 0)
-		packet->flags |= htons(BROADCAST_FLAG);
 
 	/* Request broadcast replies if we have no IP addr */
 	if ((option_mask32 & OPT_B) && packet->ciaddr == 0)
@@ -712,7 +704,6 @@ static int bcast_or_ucast(struct dhcp_packet *packet, uint32_t ciaddr, uint32_t 
 static NOINLINE int send_discover(uint32_t xid, uint32_t requested)
 {
 	struct dhcp_packet packet;
-	static int msgs = 0;
 
 	/* Fill in: op, htype, hlen, cookie, chaddr fields,
 	 * random xid field (we override it below),
@@ -730,7 +721,6 @@ static NOINLINE int send_discover(uint32_t xid, uint32_t requested)
 	 */
 	add_client_options(&packet);
 
-	if (msgs++ < 3)
 	bb_error_msg("sending %s", "discover");
 	return raw_bcast_from_client_config_ifindex(&packet, INADDR_ANY);
 }
@@ -1023,7 +1013,6 @@ static int udhcp_raw_socket(int ifindex)
 	sock.sll_ifindex = ifindex;
 	xbind(fd, (struct sockaddr *) &sock, sizeof(sock));
 
-#if 0 /* Several users reported breakage when BPF filter is used */
 	if (CLIENT_PORT == 68) {
 		/* Use only if standard port is in use */
 		/*
@@ -1074,7 +1063,6 @@ static int udhcp_raw_socket(int ifindex)
 				sizeof(filter_prog)) >= 0)
 			log1("attached filter to raw socket fd"); // log?
 	}
-#endif
 
 	if (setsockopt_1(fd, SOL_PACKET, PACKET_AUXDATA) != 0) {
 		if (errno != ENOPROTOOPT)
@@ -1112,12 +1100,13 @@ static void perform_renew(void)
 	bb_error_msg("performing DHCP renew");
 	switch (state) {
 	case BOUND:
-		change_listen_mode(LISTEN_RAW);	// zzz
+		change_listen_mode(LISTEN_KERNEL);
 	case RENEWING:
 	case REBINDING:
-//		state = RENEW_REQUESTED;	// zzz
-//		break;
+		state = RENEW_REQUESTED;
+		break;
 	case RENEW_REQUESTED: /* impatient are we? fine, square 1 */
+		udhcp_run_script(NULL, "deconfig");
 	case REQUESTING:
 	case RELEASED:
 		change_listen_mode(LISTEN_RAW);
@@ -1134,16 +1123,26 @@ static void perform_release(uint32_t server_addr, uint32_t requested_ip)
 	struct in_addr temp_addr;
 
 	/* send release packet */
-	if (state == BOUND || state == RENEWING || state == REBINDING) {
+	if (state == BOUND
+	 || state == RENEWING
+	 || state == REBINDING
+	 || state == RENEW_REQUESTED
+	) {
 		temp_addr.s_addr = server_addr;
 		strcpy(buffer, inet_ntoa(temp_addr));
 		temp_addr.s_addr = requested_ip;
 		bb_error_msg("unicasting a release of %s to %s",
 				inet_ntoa(temp_addr), buffer);
 		send_release(server_addr, requested_ip); /* unicast */
-		udhcp_run_script(NULL, "deconfig");
 	}
 	bb_error_msg("entering released state");
+/*
+ * We can be here on: SIGUSR2,
+ * or on exit (SIGTERM) and -R "release on quit" is specified.
+ * Users requested to be notified in all cases, even if not in one
+ * of the states above.
+ */
+	udhcp_run_script(NULL, "deconfig");
 
 	change_listen_mode(LISTEN_NONE);
 	state = RELEASED;
@@ -1211,6 +1210,7 @@ static void client_background(void)
 //usage:     "\n				-x lease:3600 - option 51 (lease time)"
 //usage:     "\n				-x 0x3d:0100BEEFC0FFEE - option 61 (client id)"
 //usage:     "\n	-F,--fqdn NAME		Ask server to update DNS mapping for NAME"
+//usage:     "\n	-H,-h,--hostname NAME	Send NAME as client hostname"
 //usage:     "\n	-V,--vendorclass VENDOR	Vendor identifier (default 'udhcp VERSION')"
 //usage:     "\n	-C,--clientid-none	Don't send MAC as client identifier"
 //usage:	IF_UDHCP_VERBOSE(
@@ -1248,7 +1248,7 @@ static void client_background(void)
 //usage:     "\n			-x lease:3600 - option 51 (lease time)"
 //usage:     "\n			-x 0x3d:0100BEEFC0FFEE - option 61 (client id)"
 //usage:     "\n	-F NAME		Ask server to update DNS mapping for NAME"
-//usage:     "\n	-H,-h NAME	Send NAME as client hostname (default none)"
+//usage:     "\n	-H,-h NAME	Send NAME as client hostname"
 //usage:     "\n	-V VENDOR	Vendor identifier (default 'udhcp VERSION')"
 //usage:     "\n	-C		Don't send MAC as client identifier"
 //usage:	IF_UDHCP_VERBOSE(
@@ -1256,8 +1256,8 @@ static void client_background(void)
 //usage:	)
 //usage:	)
 //usage:     "\nSignals:"
-//usage:     "\n	USR1	Renew current lease"
-//usage:     "\n	USR2	Release current lease"
+//usage:     "\n	USR1	Renew lease"
+//usage:     "\n	USR2	Release lease"
 
 
 int udhcpc_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
@@ -1272,12 +1272,13 @@ int udhcpc_main(int argc UNUSED_PARAM, char **argv)
 	llist_t *list_x = NULL;
 	int tryagain_timeout = 20;
 	int discover_timeout = 3;
-	int discover_retries = 5;
+	int discover_retries = 3;
 	uint32_t server_addr = server_addr; /* for compiler */
 	uint32_t requested_ip = 0;
 	uint32_t xid = xid; /* for compiler */
 	int packet_num;
 	int timeout; /* must be signed */
+	int rebind_timeout;
 	unsigned already_waited_sec;
 	unsigned opt;
 	IF_FEATURE_UDHCPC_ARPING(unsigned arpping_ms;)
@@ -1297,10 +1298,8 @@ int udhcpc_main(int argc UNUSED_PARAM, char **argv)
 	/* Parse command line */
 	/* O,x: list; -T,-t,-A take numeric param */
 	opt_complementary = "O::x::T+:t+:A+" IF_UDHCP_VERBOSE(":vv") ;
-
 	IF_LONG_OPTS(applet_long_options = udhcpc_longopts;)
 	opt = getopt32(argv, "CV:H:h:F:i:np:qRr:s:T:t:SA:O:ox:fB"
-		"m"	// zzz
 		USE_FOR_MMU("b")
 		IF_FEATURE_UDHCPC_ARPING("a::")
 		IF_FEATURE_UDHCP_PORT("P:")
@@ -1317,7 +1316,7 @@ int udhcpc_main(int argc UNUSED_PARAM, char **argv)
 	);
 	if (opt & (OPT_h|OPT_H)) {
 		//msg added 2011-11
-		bb_error_msg("option -h NAME is deprecated, use -x hostname:NAME");
+	//ASUS:	bb_error_msg("option -h NAME is deprecated, use -x hostname:NAME");
 		client_config.hostname = alloc_dhcp_option(DHCP_HOST_NAME, str_h, 0);
 	}
 	if (opt & OPT_F) {
@@ -1370,9 +1369,6 @@ int udhcpc_main(int argc UNUSED_PARAM, char **argv)
 		 * "optname optval", using the common routine: */
 		udhcp_str2optset(optstr, &client_config.options);
 	}
-
-	if (opt & OPT_m)	// zzz
-		minpkt = 1;
 
 	if (udhcp_read_interface(client_config.interface,
 			&client_config.ifindex,
@@ -1431,6 +1427,7 @@ int udhcpc_main(int argc UNUSED_PARAM, char **argv)
 	change_listen_mode(LISTEN_RAW);
 	packet_num = 0;
 	timeout = 0;
+	rebind_timeout = 0;
 	already_waited_sec = 0;
 
 	/* Main event loop. select() waits on signal pipe and possibly
@@ -1545,13 +1542,13 @@ int udhcpc_main(int argc UNUSED_PARAM, char **argv)
 				/* 1/2 lease passed, enter renewing state */
 				state = RENEWING;
 				client_config.first_secs = 0; /* make secs field count from 0 */
-				change_listen_mode(LISTEN_RAW);	// was: LISTEN_KERNEL -- zzz
+				change_listen_mode(LISTEN_KERNEL);
 				log1("entering renew state");
 				/* fall right through */
 			case RENEW_REQUESTED: /* manual (SIGUSR1) renew */
 			case_RENEW_REQUESTED:
 			case RENEWING:
-				if (timeout > 60) {
+				if (timeout > rebind_timeout) {
 					/* send an unicast renew request */
 			/* Sometimes observed to fail (EADDRNOTAVAIL) to bind
 			 * a new UDP socket for sending inside send_renew.
@@ -1602,12 +1599,28 @@ int udhcpc_main(int argc UNUSED_PARAM, char **argv)
 		switch (udhcp_sp_read(&rfds)) {
 		case SIGUSR1:
 			client_config.first_secs = 0; /* make secs field count from 0 */
-//			already_waited_sec = 0; /* shibby - this broke tomato renew button */
+			already_waited_sec = 0;
 			perform_renew();
-			if (state == RENEW_REQUESTED)
-//				if (timeout > tryagain_timeout) /* shibby - this broke tomato renew button */
-//					timeout = tryagain_timeout; /* shibby - this broke tomato renew button */
+			if (state == RENEW_REQUESTED) {
+				/* We might be either on the same network
+				 * (in which case renew might work),
+				 * or we might be on a completely different one
+				 * (in which case renew won't ever succeed).
+				 * For the second case, must make sure timeout
+				 * is not too big, or else we can send
+				 * futile renew requests for hours.
+				 * (Ab)use -A TIMEOUT value (usually 20 sec)
+				 * as a cap on the timeout.
+				 */
+				if (timeout > rebind_timeout)
+					rebind_timeout = 0;
+				if (timeout > tryagain_timeout)
+					timeout = tryagain_timeout;
+				/* Keep unicasting the first renew only */
+				if (rebind_timeout == 0)
+					rebind_timeout = timeout / 2;
 				goto case_RENEW_REQUESTED;
+			}
 			/* Start things over */
 			packet_num = 0;
 			/* Kill any timeouts, user wants this to hurry along */
@@ -1786,6 +1799,7 @@ int udhcpc_main(int argc UNUSED_PARAM, char **argv)
 				udhcp_run_script(&packet, state == REQUESTING ? "bound" : "renew");
 				already_waited_sec = (unsigned)monotonic_sec() - start;
 				timeout = lease_seconds / 2;
+				rebind_timeout = timeout / 8;
 				if ((unsigned)timeout < already_waited_sec) {
 					/* Something went wrong. Back to discover state */
 					timeout = already_waited_sec = 0;
@@ -1822,9 +1836,8 @@ int udhcpc_main(int argc UNUSED_PARAM, char **argv)
 					temp = udhcp_get_option(&packet, DHCP_SERVER_ID);
 					if (!temp) {
  non_matching_svid:
-						log1("%s with wrong server ID, ignoring packet",
-							"Received DHCP NAK"
-						);
+						log1("received DHCP NAK with wrong"
+							" server ID, ignoring packet");
 						continue;
 					}
 					move_from_unaligned32(svid, temp);
