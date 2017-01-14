@@ -33,7 +33,7 @@ RELEASEDIR := $(shell (cd $(SRCBASE)/.. && pwd -P))
 #PATH := $(RELEASEDIR)/tools:$(PATH)
 export TPROFILE := N
 
-PATH := $(RELEASEDIR)/tools:$(SRCBASE)/ctools:$(SRCBASE)/toolchains/hndtools-arm-linux-2.6.36-uclibc-4.5.3/bin:$(PATH)
+export PATH := $(RELEASEDIR)/tools:$(SRCBASE)/ctools:$(SRCBASE)/toolchains/hndtools-arm-linux-2.6.36-uclibc-4.5.3/bin:$(PATH)
 
 include ./target.mak
 

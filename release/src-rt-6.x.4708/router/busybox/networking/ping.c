@@ -97,6 +97,7 @@
 //usage:     "\n	-s SIZE		Send SIZE data bytes in packets (default:56)"
 //usage:     "\n	-t TTL		Set TTL"
 //usage:     "\n	-I IFACE/IP	Use interface or IP address as source"
+//usage:     "\n	-M hint		Path MTU Discovery strategy [do|want|dont]"
 //usage:     "\n	-W SEC		Seconds to wait for the first response (default:10)"
 //usage:     "\n			(after all -c CNT packets are sent)"
 //usage:     "\n	-w SEC		Seconds until ping exits (default:infinite)"
@@ -111,7 +112,9 @@
 //usage:       "Send ICMP ECHO_REQUEST packets to network hosts\n"
 //usage:     "\n	-c CNT		Send only CNT pings"
 //usage:     "\n	-s SIZE		Send SIZE data bytes in packets (default:56)"
+//usage:     "\n	-t HL		Set Hop Limit"
 //usage:     "\n	-I IFACE/IP	Use interface or IP address as source"
+//usage:     "\n	-M hint		Path MTU Discovery strategy [do|want|dont]"
 //usage:     "\n	-q		Quiet, only display output at start"
 //usage:     "\n			and when finished"
 //usage:     "\n	-p		Pattern to use for payload"
@@ -142,6 +145,11 @@
 # ifdef IPV6_2292HOPLIMIT
 #  undef IPV6_HOPLIMIT
 #  define IPV6_HOPLIMIT IPV6_2292HOPLIMIT
+# endif
+# if IPV6_PMTUDISC_DONT != IP_PMTUDISC_DONT || \
+     IPV6_PMTUDISC_WANT != IP_PMTUDISC_WANT || \
+     IPV6_PMTUDISC_DO != IP_PMTUDISC_DO
+#  error IPV6_PMTUDISC_* & IP_PMTUDISC_* constants mismatch
 # endif
 #endif
 
@@ -333,7 +341,7 @@ static int common_ping_main(sa_family_t af, char **argv)
 
 /* Full(er) version */
 
-#define OPT_STRING ("qvc:s:t:w:W:I:np:4" IF_PING6("6"))
+#define OPT_STRING ("qvc:s:t:w:W:I:np:M:4" IF_PING6("6"))
 enum {
 	OPT_QUIET = 1 << 0,
 	OPT_VERBOSE = 1 << 1,
@@ -345,8 +353,9 @@ enum {
 	OPT_I = 1 << 7,
 	/*OPT_n = 1 << 8, - ignored */
 	OPT_p = 1 << 9,
-	OPT_IPV4 = 1 << 10,
-	OPT_IPV6 = (1 << 11) * ENABLE_PING6,
+	OPT_M = 1 << 10,
+	OPT_IPV4 = 1 << 11,
+	OPT_IPV6 = (1 << 12) * ENABLE_PING6,
 };
 
 
@@ -360,6 +369,7 @@ struct globals {
 	unsigned long ntransmitted, nreceived, nrepeats;
 	uint16_t myid;
 	uint8_t pattern;
+	int pmtudisc;
 	unsigned tmin, tmax; /* in us */
 	unsigned long long tsum; /* in us, sum of all times */
 	unsigned deadline;
@@ -387,6 +397,7 @@ struct globals {
 #define pingcount    (G.pingcount   )
 #define opt_ttl      (G.opt_ttl     )
 #define myid         (G.myid        )
+#define pmtudisc     (G.pmtudisc    )
 #define tmin         (G.tmin        )
 #define tmax         (G.tmax        )
 #define tsum         (G.tsum        )
@@ -400,6 +411,7 @@ struct globals {
 #define INIT_G() do { \
 	setup_common_bufsiz(); \
 	BUILD_BUG_ON(sizeof(G) > COMMON_BUFSIZE); \
+	pmtudisc = -1; \
 	datalen = DEFDATALEN; \
 	timeout = MAXWAIT; \
 	tmin = UINT_MAX; \
@@ -708,6 +720,15 @@ static void ping4(len_and_sockaddr *lsa)
 		setsockopt_int(pingsock, IPPROTO_IP, IP_MULTICAST_TTL, opt_ttl);
 	}
 
+	if (IN_MULTICAST(ntohl(pingaddr.sin.sin_addr.s_addr))) {
+		if (myid && pmtudisc >= 0 && pmtudisc != IP_PMTUDISC_DO)
+			bb_error_msg_and_die("multicast ping does not fragment");
+		if (pmtudisc < 0)
+			pmtudisc = IP_PMTUDISC_DO;
+	}
+	if (pmtudisc >= 0)
+		setsockopt_int(pingsock, SOL_IP, IP_MTU_DISCOVER, pmtudisc);
+
 	signal(SIGINT, print_stats_and_exit);
 
 	/* start the ping's going ... */
@@ -771,11 +792,25 @@ static void ping6(len_and_sockaddr *lsa)
 	BUILD_BUG_ON(offsetof(struct icmp6_hdr, icmp6_cksum) != 2);
 	setsockopt_int(pingsock, SOL_RAW, IPV6_CHECKSUM, sockopt);
 
+	if (opt_ttl != 0) {
+		setsockopt_int(pingsock, IPPROTO_IPV6, IPV6_UNICAST_HOPS, opt_ttl);
+		setsockopt_int(pingsock, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, opt_ttl);
+	}
+
 	/* request ttl info to be returned in ancillary data */
 	setsockopt_1(pingsock, SOL_IPV6, IPV6_HOPLIMIT);
 
 	if (if_index)
 		pingaddr.sin6.sin6_scope_id = if_index;
+
+	if ((pingaddr.sin6.sin6_addr.s6_addr16[0] & htons(0xff00)) == htons(0xff00)) {
+		if (myid && pmtudisc >= 0 && pmtudisc != IPV6_PMTUDISC_DO)
+			bb_error_msg_and_die("multicast ping does not fragment");
+		if (pmtudisc < 0)
+			pmtudisc = IPV6_PMTUDISC_DO;
+	}
+	if (pmtudisc >= 0)
+		setsockopt_int(pingsock, SOL_IPV6, IPV6_MTU_DISCOVER, pmtudisc);
 
 	signal(SIGINT, print_stats_and_exit);
 
@@ -852,13 +887,13 @@ static void ping(len_and_sockaddr *lsa)
 static int common_ping_main(int opt, char **argv)
 {
 	len_and_sockaddr *lsa;
-	char *str_s, *str_p;
+	char *str_s, *str_p, *str_M;
 
 	INIT_G();
 
 	/* exactly one argument needed; -v and -q don't mix; -c NUM, -t NUM, -w NUM, -W NUM */
 	opt_complementary = "=1:q--v:v--q:c+:t+:w+:W+";
-	opt |= getopt32(argv, OPT_STRING, &pingcount, &str_s, &opt_ttl, &deadline, &timeout, &str_I, &str_p);
+	opt |= getopt32(argv, OPT_STRING, &pingcount, &str_s, &opt_ttl, &deadline, &timeout, &str_I, &str_p, &str_M);
 	if (opt & OPT_s)
 		datalen = xatou16(str_s); // -s
 	if (opt & OPT_I) { // -I
@@ -871,6 +906,16 @@ static int common_ping_main(int opt, char **argv)
 	}
 	if (opt & OPT_p)
 		G.pattern = xstrtou_range(str_p, 16, 0, 255);
+	if (opt & OPT_M) { // -M
+		if (strcmp(str_M, "do") == 0)
+			pmtudisc = IP_PMTUDISC_DO;
+		else if (strcmp(str_M, "dont") == 0)
+			pmtudisc = IP_PMTUDISC_DONT;
+		else if (strcmp(str_M, "want") == 0)
+			pmtudisc = IP_PMTUDISC_WANT;
+		else
+			bb_show_usage();
+	}
 
 	myid = (uint16_t) getpid();
 	hostname = argv[optind];

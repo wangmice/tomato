@@ -27,7 +27,7 @@ OBJS += nvparse.o
 ifeq ($(TCONFIG_USB),y)
 OBJS += usb.o
 OBJS += $(TOP)/busybox/util-linux/volume_id/ext.o
-OBJS += $(TOP)/busybox/util-linux/volume_id/util2.o
+OBJS += $(TOP)/busybox/util-linux/volume_id/util.o
 OBJS += $(TOP)/busybox/util-linux/volume_id/fat.o
 OBJS += $(TOP)/busybox/util-linux/volume_id/ntfs.o
 OBJS += $(TOP)/busybox/util-linux/volume_id/exfat.o

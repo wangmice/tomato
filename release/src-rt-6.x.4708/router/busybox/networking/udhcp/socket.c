@@ -22,21 +22,12 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
-#include <net/if.h>
-#if (defined(__GLIBC__) && __GLIBC__ >= 2 && __GLIBC_MINOR__ >= 1) || defined _NEWLIB_VERSION
-# include <netpacket/packet.h>
-# include <net/ethernet.h>
-#else
-# include <asm/types.h>
-# include <linux/if_packet.h>
-# include <linux/if_ether.h>
-#endif
-
 #include "common.h"
+#include <net/if.h>
 
-int FAST_FUNC udhcp_read_interface(const char *interface, int *ifindex, uint32_t *nip, uint8_t *mac, uint16_t *mtu)
+int FAST_FUNC udhcp_read_interface(const char *interface, int *ifindex,
+		uint32_t *nip, uint8_t *mac, uint16_t *mtu)
 {
-
 	/* char buffer instead of bona-fide struct avoids aliasing warning */
 	char ifr_buf[sizeof(struct ifreq)];
 	struct ifreq *const ifr = (void *)ifr_buf;
@@ -85,7 +76,7 @@ int FAST_FUNC udhcp_read_interface(const char *interface, int *ifindex, uint32_t
 			close(fd);
 			return -1;
 		}
-		log1("Adapter mtu %d", ifr->ifr_mtu);
+		log1("MTU %d", ifr->ifr_mtu);
 		*mtu = ifr->ifr_mtu;
 	}
 

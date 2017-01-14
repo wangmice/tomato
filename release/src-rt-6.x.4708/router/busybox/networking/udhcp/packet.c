@@ -12,8 +12,6 @@
 #include <netinet/if_ether.h>
 #include <netpacket/packet.h>
 
-int minpkt = 0;	// zzz
-
 void FAST_FUNC udhcp_init_header(struct dhcp_packet *packet, char type)
 {
 	memset(packet, 0, sizeof(*packet));
@@ -112,12 +110,23 @@ int FAST_FUNC udhcp_send_raw_packet(struct dhcp_packet *dhcp_pkt,
 	struct sockaddr_ll dest_sll;
 	struct ip_udp_dhcp_packet packet;
 	unsigned padding;
-	int fd;
+	int fd, ttl;
 	int result = -1;
+	socklen_t optlen;
 	const char *msg;
+
+	fd = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	if (fd < 0)
+		goto ret_sock;
+
+	optlen = sizeof(ttl);
+	if (getsockopt(fd, IPPROTO_IP, IP_TTL, &ttl, &optlen) < 0)
+		ttl = IPDEFTTL;
+	close(fd);
 
 	fd = socket(PF_PACKET, SOCK_DGRAM, htons(ETH_P_IP));
 	if (fd < 0) {
+	ret_sock:
 		msg = "socket(%s)";
 		goto ret_msg;
 	}
@@ -151,9 +160,7 @@ int FAST_FUNC udhcp_send_raw_packet(struct dhcp_packet *dhcp_pkt,
 	 * Thus, we retain enough padding to not go below 300 BOOTP bytes.
 	 * Some devices have filters which drop DHCP packets shorter than that.
 	 */
-
-	padding = minpkt ? DHCP_OPTIONS_BUFSIZE - 1 - udhcp_end_option(packet.data.options) : 0;
-
+	padding = DHCP_OPTIONS_BUFSIZE - 1 - udhcp_end_option(packet.data.options);
 	if (padding > DHCP_SIZE - 300)
 		padding = DHCP_SIZE - 300;
 
@@ -172,7 +179,7 @@ int FAST_FUNC udhcp_send_raw_packet(struct dhcp_packet *dhcp_pkt,
 	packet.ip.tot_len = htons(IP_UDP_DHCP_SIZE - padding);
 	packet.ip.ihl = sizeof(packet.ip) >> 2;
 	packet.ip.version = IPVERSION;
-	packet.ip.ttl = IPDEFTTL;
+	packet.ip.ttl = ttl;
 	packet.ip.check = inet_cksum((uint16_t *)&packet.ip, sizeof(packet.ip));
 
 	udhcp_dump_packet(dhcp_pkt);
@@ -225,7 +232,7 @@ int FAST_FUNC udhcp_send_kernel_packet(struct dhcp_packet *dhcp_pkt,
 	}
 
 	udhcp_dump_packet(dhcp_pkt);
-	padding = minpkt ? DHCP_OPTIONS_BUFSIZE - 1 - udhcp_end_option(dhcp_pkt->options) : 0;
+	padding = DHCP_OPTIONS_BUFSIZE - 1 - udhcp_end_option(dhcp_pkt->options);
 	if (padding > DHCP_SIZE - 300)
 		padding = DHCP_SIZE - 300;
 	result = safe_write(fd, dhcp_pkt, DHCP_SIZE - padding);
