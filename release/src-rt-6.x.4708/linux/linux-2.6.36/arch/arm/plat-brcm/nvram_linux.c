@@ -2,11 +2,11 @@
  * NVRAM variable manipulation (Linux kernel half)
  *
  * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
- * 
+ *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
@@ -365,11 +365,11 @@ early_nvram_init(void)
 		lim = sfl_info->size;
 
 		BUG_ON(request_resource(&iomem_resource, &norflash_region));
-	
+
 		flash_base = sfl_info->base;
-	
+
 		BUG_ON(IS_ERR_OR_NULL((void *)flash_base));
-		
+
 		off = FLASH_MIN;
 		while (off <= lim) {
 			/* Windowed flash access */
@@ -552,7 +552,7 @@ _nvram_realloc(struct nvram_tuple *t, const char *name, const char *value)
 	} else if( 0 != strcmp(t->value, value)) {
 		/* In place */
 		strcpy(t->value, value);
-	} 
+	}
 
 	return t;
 }
@@ -773,11 +773,11 @@ nvram_commit(void)
 		magic_offset = i + ((void *)&header->magic - (void *)header);
 	} else {
 		offset = nvram_mtd->size - nvram_space;
-		magic_offset = ((void *)&header->magic - (void *)header);
 		header = (struct nvram_header *)buf;
+		magic_offset = ((void *)&header->magic - (void *)header);
 	}
 
-	/* clear the existing magic # to mark the NVRAM as unusable 
+	/* clear the existing magic # to mark the NVRAM as unusable
 	 * we can pull MAGIC bits low without erase
 	 */
 	header->magic = NVRAM_CLEAR_MAGIC; /* All zeros magic */
@@ -982,10 +982,10 @@ static long
 #endif
 dev_nvram_ioctl(
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 36)
-	struct inode *inode, 
+	struct inode *inode,
 #endif
-	struct file *file, 
-	unsigned int cmd, 
+	struct file *file,
+	unsigned int cmd,
 	unsigned long arg)
 {
 	if (cmd != NVRAM_MAGIC)
