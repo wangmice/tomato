@@ -27,12 +27,12 @@
 #
 # -DTEST_HIDDEN makes Assigned Call ID sent as a hidden AVP
 #
-# -DTRUST_PPPD_TO_DIE 
+# -DTRUST_PPPD_TO_DIE
 #
 # Defining TRUST_PPPD_TO_DIE disables a workaround for broken pppds. Do NOT
-# define this unless you fully trust your version of pppd to honour SIGTERM. 
+# define this unless you fully trust your version of pppd to honour SIGTERM.
 # However, if you experience hanging pppd's, which cause xl2tpd to also hang,
-# enable this. 
+# enable this.
 # The cost of not trusting pppd to die (and shoot it down hard), is that your
 # pppd's ip-down scripts will not have a chance to run.
 #
@@ -140,14 +140,14 @@ install: ${EXEC} ${CONTROL_EXEC}
 	install -m 0644 doc/xl2tpd.conf.5 doc/l2tp-secrets.5 \
 		 ${MANDIR}/man5/
 	# pfc
-	#install -d -m 0755 ${BINDIR}
-	#install -m 0755 pfc ${BINDIR}/pfc
-	#install -d -m 0755 ${MANDIR}/man1
-	#install -m 0644 contrib/pfc.1 ${MANDIR}/man1/
+	# install -d -m 0755 ${BINDIR}
+	# install -m 0755 pfc ${BINDIR}/pfc
+	# install -d -m 0755 ${MANDIR}/man1
+	# install -m 0644 contrib/pfc.1 ${MANDIR}/man1/
 	# control exec
 	install -d -m 0755 ${SBINDIR}
 	install -m 0755 $(CONTROL_EXEC) ${SBINDIR}/$(CONTROL_EXEC)
-	
+
 # openbsd
 #	install -d -m 0755 /var/run/xl2tpd
 #	mkfifo /var/run/l2tp-control
