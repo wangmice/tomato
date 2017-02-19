@@ -318,13 +318,6 @@ main(argc, argv)
     struct protent *protp;
     char numbuf[16];
 
-    strlcpy(path_ipup, _PATH_IPUP, sizeof(path_ipup));
-    strlcpy(path_ipdown, _PATH_IPDOWN, sizeof(path_ipdown));
-#ifdef INET6
-    strlcpy(path_ipv6up, _PATH_IPV6UP, sizeof(path_ipv6up));
-    strlcpy(path_ipv6down, _PATH_IPV6DOWN, sizeof(path_ipv6down));
-#endif
-
     link_stats_valid = 0;
     new_phase(PHASE_INITIALIZE);
 
@@ -754,9 +747,12 @@ void
 set_ifunit(iskey)
     int iskey;
 {
-    info("Using interface %s%d", PPP_DRV_NAME, ifunit);
     slprintf(ifname, sizeof(ifname), "%s%d", PPP_DRV_NAME, ifunit);
-    script_setenv("IFNAME", ifname, iskey);
+    script_setenv("IFUNIT", ifname, iskey);
+    if (req_ifname[0])
+	sifname(ifunit, req_ifname);
+    info("Using interface %s", ifname);
+    script_setenv("IFNAME", ifname, 0);
     if (iskey) {
 	create_pidfile(getpid());	/* write pid to file */
 	create_linkpidfile(getpid());
@@ -861,11 +857,14 @@ create_linkpidfile(pid)
 /*
  * remove_pidfile - remove our pid files
  */
-void remove_pidfiles()
+void remove_pidfiles(keep_linkpid)
+    int keep_linkpid;
 {
     if (pidfilename[0] != 0 && unlink(pidfilename) < 0 && errno != ENOENT)
 	warn("unable to delete pid file %s: %m", pidfilename);
     pidfilename[0] = 0;
+    if (keep_linkpid)
+	return;
     if (linkpidfile[0] != 0 && unlink(linkpidfile) < 0 && errno != ENOENT)
 	warn("unable to delete pid file %s: %m", linkpidfile);
     linkpidfile[0] = 0;
@@ -1233,7 +1232,7 @@ cleanup()
 	the_channel->disestablish_ppp(devfd);
     if (the_channel->cleanup)
 	(*the_channel->cleanup)();
-    remove_pidfiles();
+    remove_pidfiles(0);
 
 #ifdef USE_TDB
     if (pppdb != NULL)
@@ -1313,33 +1312,33 @@ static int uptime_diff_set = 0;
 
 static void check_time(void)
 {
-	long new_diff;
-	struct timeval t;
-	struct sysinfo i;
+    long new_diff;
+    struct timeval t;
+    struct sysinfo i;
     struct callout *p;
-	
-	if(nochecktime)
-		return;
 
-	gettimeofday(&t, NULL);
-	sysinfo(&i);
-	new_diff = t.tv_sec - i.uptime;
-	
-	if (!uptime_diff_set) {
-		uptime_diff = new_diff;
-		uptime_diff_set = 1;
-		return;
-	}
+    if (nochecktime)
+	return;
 
-	if ((new_diff - 5 > uptime_diff) || (new_diff + 5 < uptime_diff)) {
-		/* system time has changed, update counters and timeouts */
-		info("System time change detected.");
-		start_time.tv_sec += new_diff - uptime_diff;
-		
-    	for (p = callout; p != NULL; p = p->c_next)
-			p->c_time.tv_sec += new_diff - uptime_diff;
-	}
+    gettimeofday(&t, NULL);
+    sysinfo(&i);
+    new_diff = t.tv_sec - i.uptime;
+
+    if (!uptime_diff_set) {
 	uptime_diff = new_diff;
+	uptime_diff_set = 1;
+	return;
+    }
+
+    if ((new_diff - 5 > uptime_diff) || (new_diff + 5 < uptime_diff)) {
+	/* system time has changed, update counters and timeouts */
+	info("System time change detected.");
+	start_time.tv_sec += new_diff - uptime_diff;
+
+	for (p = callout; p != NULL; p = p->c_next)
+	    p->c_time.tv_sec += new_diff - uptime_diff;
+    }
+    uptime_diff = new_diff;
 }
 
 /*
@@ -1411,8 +1410,8 @@ calltimeout()
 {
     struct callout *p;
 
-	check_time();
-	
+    check_time();
+
     while (callout != NULL) {
 	p = callout;
 
@@ -1440,8 +1439,8 @@ timeleft(tvp)
 {
     if (callout == NULL)
 	return NULL;
-	
-	check_time();
+
+    check_time();
 
     gettimeofday(&timenow, NULL);
     tvp->tv_sec = callout->c_time.tv_sec - timenow.tv_sec;
@@ -1697,6 +1696,52 @@ safe_fork(int infd, int outfd, int errfd)
 	return 0;
 }
 
+static bool
+add_script_env(pos, newstring)
+    int pos;
+    char *newstring;
+{
+    if (pos + 1 >= s_env_nalloc) {
+	int new_n = pos + 17;
+	char **newenv = realloc(script_env, new_n * sizeof(char *));
+	if (newenv == NULL) {
+	    free(newstring - 1);
+	    return 0;
+	}
+	script_env = newenv;
+	s_env_nalloc = new_n;
+    }
+    script_env[pos] = newstring;
+    script_env[pos + 1] = NULL;
+    return 1;
+}
+
+static void
+remove_script_env(pos)
+    int pos;
+{
+    free(script_env[pos] - 1);
+    while ((script_env[pos] = script_env[pos + 1]) != NULL)
+	pos++;
+}
+
+/*
+ * update_system_environment - process the list of set/unset options
+ * and update the system environment.
+ */
+static void
+update_system_environment()
+{
+    struct userenv *uep;
+
+    for (uep = userenv_list; uep != NULL; uep = uep->ue_next) {
+	if (uep->ue_isset)
+	    setenv(uep->ue_name, uep->ue_value, 1);
+	else
+	    unsetenv(uep->ue_name);
+    }
+}
+
 /*
  * device_script - run a program to talk to the specified fds
  * (e.g. to run the connector or disconnector script).
@@ -1752,12 +1797,51 @@ device_script(program, in, out, dont_wait)
 	fprintf(stderr, "pppd: setuid failed\n");
 	exit(1);
     }
+    update_system_environment();
     execl("/bin/sh", "sh", "-c", program, (char *)0);
     perror("pppd: could not exec /bin/sh");
     _exit(99);
     /* NOTREACHED */
 }
 
+
+/*
+ * update_script_environment - process the list of set/unset options
+ * and update the script environment.  Note that we intentionally do
+ * not update the TDB.  These changes are layered on top right before
+ * exec.  It is not possible to use script_setenv() or
+ * script_unsetenv() safely after this routine is run.
+ */
+static void
+update_script_environment()
+{
+    struct userenv *uep;
+
+    for (uep = userenv_list; uep != NULL; uep = uep->ue_next) {
+	int i;
+	char *p, *newstring;
+	int nlen = strlen(uep->ue_name);
+
+	for (i = 0; (p = script_env[i]) != NULL; i++) {
+	    if (strncmp(p, uep->ue_name, nlen) == 0 && p[nlen] == '=')
+		break;
+	}
+	if (uep->ue_isset) {
+	    nlen += strlen(uep->ue_value) + 2;
+	    newstring = malloc(nlen + 1);
+	    if (newstring == NULL)
+		continue;
+	    *newstring++ = 0;
+	    slprintf(newstring, nlen, "%s=%s", uep->ue_name, uep->ue_value);
+	    if (p != NULL)
+		script_env[i] = newstring;
+	    else
+		add_script_env(i, newstring);
+	} else {
+	    remove_script_env(i);
+	}
+    }
+}
 
 /*
  * run_program - execute a program with given arguments,
@@ -1829,6 +1913,7 @@ run_program(prog, args, must_exist, done, arg, wait)
 #endif
 
     /* run the program */
+    update_script_environment();
     execve(prog, args, script_env);
     if (must_exist || errno != ENOENT) {
 	/* have to reopen the log, there's nowhere else
@@ -2051,25 +2136,16 @@ script_setenv(var, value, iskey)
     } else {
 	/* no space allocated for script env. ptrs. yet */
 	i = 0;
-	script_env = (char **) malloc(16 * sizeof(char *));
-	if (script_env == 0)
+	script_env = malloc(16 * sizeof(char *));
+	if (script_env == 0) {
+	    free(newstring - 1);
 	    return;
+	}
 	s_env_nalloc = 16;
     }
 
-    /* reallocate script_env with more space if needed */
-    if (i + 1 >= s_env_nalloc) {
-	int new_n = i + 17;
-	char **newenv = (char **) realloc((void *)script_env,
-					  new_n * sizeof(char *));
-	if (newenv == 0)
-	    return;
-	script_env = newenv;
-	s_env_nalloc = new_n;
-    }
-
-    script_env[i] = newstring;
-    script_env[i+1] = 0;
+    if (!add_script_env(i, newstring))
+	return;
 
 #ifdef USE_TDB
     if (pppdb != NULL) {
@@ -2100,9 +2176,7 @@ script_unsetenv(var)
 	    if (p[-1] && pppdb != NULL)
 		delete_db_key(p);
 #endif
-	    free(p-1);
-	    while ((script_env[i] = script_env[i+1]) != 0)
-		++i;
+	    remove_script_env(i);
 	    break;
 	}
     }
