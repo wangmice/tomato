@@ -4,18 +4,21 @@
 *
 * Perform PPPoE discovery
 *
-* Copyright (C) 1999 by Roaring Penguin Software Inc.
+* Copyright (C) 1999-2012 by Roaring Penguin Software Inc.
+*
+* LIC: GPL
 *
 ***********************************************************************/
 
 static char const RCSID[] =
-"$Id: discovery.c,v 1.6 2008/06/15 04:35:50 paulus Exp $";
-
+"$Id$";
 #define _GNU_SOURCE 1
+
 #include "pppoe.h"
-#include "pppd/pppd.h"
-#include "pppd/fsm.h"
-#include "pppd/lcp.h"
+
+#ifdef HAVE_SYSLOG_H
+#include <syslog.h>
+#endif
 
 #include <string.h>
 #include <stdlib.h>
@@ -40,6 +43,16 @@ static char const RCSID[] =
 #endif
 
 #include <signal.h>
+
+#ifdef PLUGIN
+#include "pppd/pppd.h"
+#include "pppd/fsm.h"
+#include "pppd/lcp.h"
+extern int got_sigterm;
+extern int got_sighup;
+#else
+int persist = 0;
+#endif
 
 /**********************************************************************
 *%FUNCTION: parseForHostUniq
@@ -113,14 +126,16 @@ parsePADOTags(UINT16_t type, UINT16_t len, unsigned char *data,
 {
     struct PacketCriteria *pc = (struct PacketCriteria *) extra;
     PPPoEConnection *conn = pc->conn;
-    UINT16_t mru;
     int i;
+#ifdef PLUGIN
+    UINT16_t mru;
+#endif
 
     switch(type) {
     case TAG_AC_NAME:
 	pc->seenACName = 1;
 	if (conn->printACNames) {
-	    info("Access-Concentrator: %.*s", (int) len, data);
+	    printf("Access-Concentrator: %.*s\n", (int) len, data);
 	}
 	if (conn->acName && len == strlen(conn->acName) &&
 	    !strncmp((char *) data, conn->acName, len)) {
@@ -129,46 +144,88 @@ parsePADOTags(UINT16_t type, UINT16_t len, unsigned char *data,
 	break;
     case TAG_SERVICE_NAME:
 	pc->seenServiceName = 1;
+	if (conn->printACNames && len > 0) {
+	    printf("       Service-Name: %.*s\n", (int) len, data);
+	}
 	if (conn->serviceName && len == strlen(conn->serviceName) &&
 	    !strncmp((char *) data, conn->serviceName, len)) {
 	    pc->serviceNameOK = 1;
 	}
 	break;
     case TAG_AC_COOKIE:
+	if (conn->printACNames) {
+	    printf("Got a cookie:");
+	    /* Print first 20 bytes of cookie */
+	    for (i=0; i<len && i < 20; i++) {
+		printf(" %02x", (unsigned) data[i]);
+	    }
+	    if (i < len) printf("...");
+	    printf("\n");
+	}
 	conn->cookie.type = htons(type);
 	conn->cookie.length = htons(len);
 	memcpy(conn->cookie.payload, data, len);
 	break;
     case TAG_RELAY_SESSION_ID:
+	if (conn->printACNames) {
+	    printf("Got a Relay-ID:");
+	    /* Print first 20 bytes of relay ID */
+	    for (i=0; i<len && i < 20; i++) {
+		printf(" %02x", (unsigned) data[i]);
+	    }
+	    if (i < len) printf("...");
+	    printf("\n");
+	}
 	conn->relayId.type = htons(type);
 	conn->relayId.length = htons(len);
 	memcpy(conn->relayId.payload, data, len);
 	break;
+    case TAG_SERVICE_NAME_ERROR:
+	if (conn->printACNames) {
+	    printf("Got a Service-Name-Error tag: %.*s\n", (int) len, data);
+	} else {
+	    pktLogErrs("PADO", type, len, data, extra);
+	    pc->gotError = 1;
+	    if (!persist) {
+		exit(1);
+	    }
+	}
+	break;
+    case TAG_AC_SYSTEM_ERROR:
+	if (conn->printACNames) {
+	    printf("Got a System-Error tag: %.*s\n", (int) len, data);
+	} else {
+	    pktLogErrs("PADO", type, len, data, extra);
+	    pc->gotError = 1;
+	    if (!persist) {
+		exit(1);
+	    }
+	}
+	break;
+    case TAG_GENERIC_ERROR:
+	if (conn->printACNames) {
+	    printf("Got a Generic-Error tag: %.*s\n", (int) len, data);
+	} else {
+	    pktLogErrs("PADO", type, len, data, extra);
+	    pc->gotError = 1;
+	    if (!persist) {
+		exit(1);
+	    }
+	}
+	break;
+#ifdef PLUGIN
     case TAG_PPP_MAX_PAYLOAD:
 	if (len == sizeof(mru)) {
 	    memcpy(&mru, data, sizeof(mru));
 	    mru = ntohs(mru);
 	    if (mru >= ETH_PPPOE_MTU) {
-		if (lcp_allowoptions[0].mru > mru)
-		    lcp_allowoptions[0].mru = mru;
-		if (lcp_wantoptions[0].mru > mru)
-		    lcp_wantoptions[0].mru = mru;
-		conn->seenMaxPayload = 1;
+		if (lcp_allowoptions[0].mru > mru) lcp_allowoptions[0].mru = mru;
+               if (lcp_wantoptions[0].mru > mru) lcp_wantoptions[0].mru = mru;
+               conn->seenMaxPayload = 1;
 	    }
 	}
 	break;
-    case TAG_SERVICE_NAME_ERROR:
-	error("PADO: Service-Name-Error: %.*s", (int) len, data);
-	conn->error = 1;
-	break;
-    case TAG_AC_SYSTEM_ERROR:
-	error("PADO: System-Error: %.*s", (int) len, data);
-	conn->error = 1;
-	break;
-    case TAG_GENERIC_ERROR:
-	error("PADO: Generic-Error: %.*s", (int) len, data);
-	conn->error = 1;
-	break;
+#endif
     }
 }
 
@@ -188,42 +245,38 @@ static void
 parsePADSTags(UINT16_t type, UINT16_t len, unsigned char *data,
 	      void *extra)
 {
-    PPPoEConnection *conn = (PPPoEConnection *) extra;
+#ifdef PLUGIN
     UINT16_t mru;
+#endif
+    PPPoEConnection *conn = (PPPoEConnection *) extra;
     switch(type) {
     case TAG_SERVICE_NAME:
-	dbglog("PADS: Service-Name: '%.*s'", (int) len, data);
-	break;
-    case TAG_PPP_MAX_PAYLOAD:
-	if (len == sizeof(mru)) {
-	    memcpy(&mru, data, sizeof(mru));
-	    mru = ntohs(mru);
-	    if (mru >= ETH_PPPOE_MTU) {
-		if (lcp_allowoptions[0].mru > mru)
-		    lcp_allowoptions[0].mru = mru;
-		if (lcp_wantoptions[0].mru > mru)
-		    lcp_wantoptions[0].mru = mru;
-		conn->seenMaxPayload = 1;
-	    }
-	}
-	break;
-    case TAG_SERVICE_NAME_ERROR:
-	error("PADS: Service-Name-Error: %.*s", (int) len, data);
-	conn->error = 1;
-	break;
-    case TAG_AC_SYSTEM_ERROR:
-	error("PADS: System-Error: %.*s", (int) len, data);
-	conn->error = 1;
+	syslog(LOG_DEBUG, "PADS: Service-Name: '%.*s'", (int) len, data);
 	break;
     case TAG_GENERIC_ERROR:
-	error("PADS: Generic-Error: %.*s", (int) len, data);
-	conn->error = 1;
+    case TAG_AC_SYSTEM_ERROR:
+    case TAG_SERVICE_NAME_ERROR:
+	pktLogErrs("PADS", type, len, data, extra);
+	conn->PADSHadError = 1;
 	break;
     case TAG_RELAY_SESSION_ID:
 	conn->relayId.type = htons(type);
 	conn->relayId.length = htons(len);
 	memcpy(conn->relayId.payload, data, len);
 	break;
+#ifdef PLUGIN
+    case TAG_PPP_MAX_PAYLOAD:
+	if (len == sizeof(mru)) {
+	    memcpy(&mru, data, sizeof(mru));
+	    mru = ntohs(mru);
+	    if (mru >= ETH_PPPOE_MTU) {
+		if (lcp_allowoptions[0].mru > mru) lcp_allowoptions[0].mru = mru;
+               if (lcp_wantoptions[0].mru > mru) lcp_wantoptions[0].mru = mru;
+               conn->seenMaxPayload = 1;
+	    }
+	}
+	break;
+#endif
     }
 }
 
@@ -258,7 +311,8 @@ sendPADI(PPPoEConnection *conn)
     memcpy(packet.ethHdr.h_source, conn->myEth, ETH_ALEN);
 
     packet.ethHdr.h_proto = htons(Eth_PPPOE_Discovery);
-    packet.vertype = PPPOE_VER_TYPE(1, 1);
+    packet.ver = 1;
+    packet.type = 1;
     packet.code = CODE_PADI;
     packet.session = 0;
 
@@ -290,6 +344,7 @@ sendPADI(PPPoEConnection *conn)
 	plen += sizeof(pid) + TAG_HDR_SIZE;
     }
 
+#ifdef PLUGIN
     /* Add our maximum MTU/MRU */
     if (MIN(lcp_allowoptions[0].mru, lcp_wantoptions[0].mru) > ETH_PPPOE_MTU) {
 	PPPoETag maxPayload;
@@ -302,10 +357,18 @@ sendPADI(PPPoEConnection *conn)
 	cursor += sizeof(mru) + TAG_HDR_SIZE;
 	plen += sizeof(mru) + TAG_HDR_SIZE;
     }
+#endif
 
     packet.length = htons(plen);
 
     sendPacket(conn, conn->discoverySocket, &packet, (int) (plen + HDR_SIZE));
+#ifdef DEBUGGING_ENABLED
+    if (conn->debugFile) {
+	dumpPacket(conn->debugFile, &packet, "SENT");
+	fprintf(conn->debugFile, "\n");
+	fflush(conn->debugFile);
+    }
+#endif
 }
 
 /**********************************************************************
@@ -318,7 +381,7 @@ sendPADI(PPPoEConnection *conn)
 *%DESCRIPTION:
 * Waits for a PADO packet and copies useful information
 ***********************************************************************/
-void
+static void
 waitForPADO(PPPoEConnection *conn, int timeout)
 {
     fd_set readable;
@@ -332,12 +395,9 @@ waitForPADO(PPPoEConnection *conn, int timeout)
 
     struct PacketCriteria pc;
     pc.conn          = conn;
-    pc.acNameOK      = (conn->acName)      ? 0 : 1;
-    pc.serviceNameOK = (conn->serviceName) ? 0 : 1;
-    pc.seenACName    = 0;
-    pc.seenServiceName = 0;
+#ifdef PLUGIN
     conn->seenMaxPayload = 0;
-    conn->error = 0;
+#endif
 
     if (gettimeofday(&expire_at, NULL) < 0) {
 	fatalSys("gettimeofday (waitForPADO)");
@@ -345,6 +405,9 @@ waitForPADO(PPPoEConnection *conn, int timeout)
     expire_at.tv_sec += timeout;
 
     do {
+#ifdef PLUGIN
+	if (got_sigterm || got_sighup) return;
+#endif
 	if (BPF_BUFFER_IS_EMPTY) {
 	    if (gettimeofday(&now, NULL) < 0) {
 		fatalSys("gettimeofday (waitForPADO)");
@@ -371,10 +434,12 @@ waitForPADO(PPPoEConnection *conn, int timeout)
 	    while(1) {
 		r = select(conn->discoverySocket+1, &readable, NULL, NULL, &tv);
 		if (r >= 0 || errno != EINTR) break;
+#ifdef PLUGIN
+		if (got_sigterm || got_sighup) return;
+#endif
 	    }
 	    if (r < 0) {
-		error("select (waitForPADO): %m");
-		return;
+		fatalSys("select (waitForPADO)");
 	    }
 	    if (r == 0) {
 		/* Timed out */
@@ -387,7 +452,7 @@ waitForPADO(PPPoEConnection *conn, int timeout)
 
 	/* Check length */
 	if (ntohs(packet.length) + HDR_SIZE > len) {
-	    error("Bogus PPPoE length field (%u)",
+	    syslog(LOG_ERR, "Bogus PPPoE length field (%u)",
 		   (unsigned int) ntohs(packet.length));
 	    continue;
 	}
@@ -397,34 +462,61 @@ waitForPADO(PPPoEConnection *conn, int timeout)
 	if (etherType(&packet) != Eth_PPPOE_Discovery) continue;
 #endif
 
+#ifdef DEBUGGING_ENABLED
+	if (conn->debugFile) {
+	    dumpPacket(conn->debugFile, &packet, "RCVD");
+	    fprintf(conn->debugFile, "\n");
+	    fflush(conn->debugFile);
+	}
+#endif
 	/* If it's not for us, loop again */
 	if (!packetIsForMe(conn, &packet)) continue;
 
 	if (packet.code == CODE_PADO) {
 	    if (BROADCAST(packet.ethHdr.h_source)) {
-		error("Ignoring PADO packet from broadcast MAC address");
+		printErr("Ignoring PADO packet from broadcast MAC address");
 		continue;
 	    }
+#ifdef PLUGIN
 	    if (conn->req_peer
 		&& memcmp(packet.ethHdr.h_source, conn->req_peer_mac, ETH_ALEN) != 0) {
 		warn("Ignoring PADO packet from wrong MAC address");
 		continue;
 	    }
-	    if (parsePacket(&packet, parsePADOTags, &pc) < 0)
-		return;
-	    if (conn->error)
-		return;
+#endif
+	    pc.gotError = 0;
+	    pc.seenACName    = 0;
+	    pc.seenServiceName = 0;
+	    pc.acNameOK      = (conn->acName)      ? 0 : 1;
+	    pc.serviceNameOK = (conn->serviceName) ? 0 : 1;
+	    parsePacket(&packet, parsePADOTags, &pc);
+	    if (pc.gotError) {
+		printErr("Error in PADO packet");
+		continue;
+	    }
+
 	    if (!pc.seenACName) {
-		error("Ignoring PADO packet with no AC-Name tag");
+		printErr("Ignoring PADO packet with no AC-Name tag");
 		continue;
 	    }
 	    if (!pc.seenServiceName) {
-		error("Ignoring PADO packet with no Service-Name tag");
+		printErr("Ignoring PADO packet with no Service-Name tag");
 		continue;
 	    }
 	    conn->numPADOs++;
 	    if (pc.acNameOK && pc.serviceNameOK) {
 		memcpy(conn->peerEth, packet.ethHdr.h_source, ETH_ALEN);
+		if (conn->printACNames) {
+		    printf("AC-Ethernet-Address: %02x:%02x:%02x:%02x:%02x:%02x\n",
+			   (unsigned) conn->peerEth[0],
+			   (unsigned) conn->peerEth[1],
+			   (unsigned) conn->peerEth[2],
+			   (unsigned) conn->peerEth[3],
+			   (unsigned) conn->peerEth[4],
+			   (unsigned) conn->peerEth[5]);
+		    printf("--------------------------------------------------\n");
+		    continue;
+		}
 		conn->discoveryState = STATE_RECEIVED_PADO;
 		break;
 	    }
@@ -461,7 +553,8 @@ sendPADR(PPPoEConnection *conn)
     memcpy(packet.ethHdr.h_source, conn->myEth, ETH_ALEN);
 
     packet.ethHdr.h_proto = htons(Eth_PPPOE_Discovery);
-    packet.vertype = PPPOE_VER_TYPE(1, 1);
+    packet.ver = 1;
+    packet.type = 1;
     packet.code = CODE_PADR;
     packet.session = 0;
 
@@ -485,19 +578,6 @@ sendPADR(PPPoEConnection *conn)
 	plen += sizeof(pid) + TAG_HDR_SIZE;
     }
 
-    /* Add our maximum MTU/MRU */
-    if (MIN(lcp_allowoptions[0].mru, lcp_wantoptions[0].mru) > ETH_PPPOE_MTU) {
-	PPPoETag maxPayload;
-	UINT16_t mru = htons(MIN(lcp_allowoptions[0].mru, lcp_wantoptions[0].mru));
-	maxPayload.type = htons(TAG_PPP_MAX_PAYLOAD);
-	maxPayload.length = htons(sizeof(mru));
-	memcpy(maxPayload.payload, &mru, sizeof(mru));
-	CHECK_ROOM(cursor, packet.payload, sizeof(mru) + TAG_HDR_SIZE);
-	memcpy(cursor, &maxPayload, sizeof(mru) + TAG_HDR_SIZE);
-	cursor += sizeof(mru) + TAG_HDR_SIZE;
-	plen += sizeof(mru) + TAG_HDR_SIZE;
-    }
-
     /* Copy cookie and relay-ID if needed */
     if (conn->cookie.type) {
 	CHECK_ROOM(cursor, packet.payload,
@@ -515,8 +595,30 @@ sendPADR(PPPoEConnection *conn)
 	plen += ntohs(conn->relayId.length) + TAG_HDR_SIZE;
     }
 
+#ifdef PLUGIN
+    /* Add our maximum MTU/MRU */
+    if (MIN(lcp_allowoptions[0].mru, lcp_wantoptions[0].mru) > ETH_PPPOE_MTU) {
+	PPPoETag maxPayload;
+	UINT16_t mru = htons(MIN(lcp_allowoptions[0].mru, lcp_wantoptions[0].mru));
+	maxPayload.type = htons(TAG_PPP_MAX_PAYLOAD);
+	maxPayload.length = htons(sizeof(mru));
+	memcpy(maxPayload.payload, &mru, sizeof(mru));
+	CHECK_ROOM(cursor, packet.payload, sizeof(mru) + TAG_HDR_SIZE);
+	memcpy(cursor, &maxPayload, sizeof(mru) + TAG_HDR_SIZE);
+	cursor += sizeof(mru) + TAG_HDR_SIZE;
+	plen += sizeof(mru) + TAG_HDR_SIZE;
+    }
+#endif
+
     packet.length = htons(plen);
     sendPacket(conn, conn->discoverySocket, &packet, (int) (plen + HDR_SIZE));
+#ifdef DEBUGGING_ENABLED
+    if (conn->debugFile) {
+	dumpPacket(conn->debugFile, &packet, "SENT");
+	fprintf(conn->debugFile, "\n");
+	fflush(conn->debugFile);
+    }
+#endif
 }
 
 /**********************************************************************
@@ -546,8 +648,10 @@ waitForPADS(PPPoEConnection *conn, int timeout)
     }
     expire_at.tv_sec += timeout;
 
-    conn->error = 0;
     do {
+#ifdef PLUGIN
+	if (got_sigterm || got_sighup) return;
+#endif
 	if (BPF_BUFFER_IS_EMPTY) {
 	    if (gettimeofday(&now, NULL) < 0) {
 		fatalSys("gettimeofday (waitForPADS)");
@@ -574,10 +678,12 @@ waitForPADS(PPPoEConnection *conn, int timeout)
 	    while(1) {
 		r = select(conn->discoverySocket+1, &readable, NULL, NULL, &tv);
 		if (r >= 0 || errno != EINTR) break;
+#ifdef PLUGIN
+		if (got_sigterm || got_sighup) return;
+#endif
 	    }
 	    if (r < 0) {
-		error("select (waitForPADS): %m");
-		return;
+		fatalSys("select (waitForPADS)");
 	    }
 	    if (r == 0) {
 		/* Timed out */
@@ -590,7 +696,7 @@ waitForPADS(PPPoEConnection *conn, int timeout)
 
 	/* Check length */
 	if (ntohs(packet.length) + HDR_SIZE > len) {
-	    error("Bogus PPPoE length field (%u)",
+	    syslog(LOG_ERR, "Bogus PPPoE length field (%u)",
 		   (unsigned int) ntohs(packet.length));
 	    continue;
 	}
@@ -599,7 +705,13 @@ waitForPADS(PPPoEConnection *conn, int timeout)
 	/* If it's not a Discovery packet, loop again */
 	if (etherType(&packet) != Eth_PPPOE_Discovery) continue;
 #endif
-
+#ifdef DEBUGGING_ENABLED
+	if (conn->debugFile) {
+	    dumpPacket(conn->debugFile, &packet, "RCVD");
+	    fprintf(conn->debugFile, "\n");
+	    fflush(conn->debugFile);
+	}
+#endif
 	/* If it's not from the AC, it's not for me */
 	if (memcmp(packet.ethHdr.h_source, conn->peerEth, ETH_ALEN)) continue;
 
@@ -609,23 +721,24 @@ waitForPADS(PPPoEConnection *conn, int timeout)
 	/* Is it PADS?  */
 	if (packet.code == CODE_PADS) {
 	    /* Parse for goodies */
-	    if (parsePacket(&packet, parsePADSTags, conn) < 0)
-		return;
-	    if (conn->error)
-		return;
-	    conn->discoveryState = STATE_SESSION;
-	    break;
+	    conn->PADSHadError = 0;
+	    parsePacket(&packet, parsePADSTags, conn);
+	    if (!conn->PADSHadError) {
+		conn->discoveryState = STATE_SESSION;
+		break;
+	    }
 	}
     } while (conn->discoveryState != STATE_SESSION);
 
     /* Don't bother with ntohs; we'll just end up converting it back... */
     conn->session = packet.session;
 
-    info("PPP session is %d", (int) ntohs(conn->session));
+    syslog(LOG_INFO, "PPP session is %d (0x%x)", (int) ntohs(conn->session),
+	   (unsigned int) ntohs(conn->session));
 
     /* RFC 2516 says session id MUST NOT be zero or 0xFFFF */
     if (ntohs(conn->session) == 0 || ntohs(conn->session) == 0xFFFF) {
-	error("Access concentrator used a session value of %x -- the AC is violating RFC 2516", (unsigned int) ntohs(conn->session));
+	syslog(LOG_ERR, "Access concentrator used a session value of %x -- the AC is violating RFC 2516", (unsigned int) ntohs(conn->session));
     }
 }
 
@@ -641,36 +754,83 @@ waitForPADS(PPPoEConnection *conn, int timeout)
 void
 discovery(PPPoEConnection *conn)
 {
-    int padiAttempts = 0;
-    int padrAttempts = 0;
+    int padiAttempts;
+    int padrAttempts;
     int timeout = conn->discoveryTimeout;
 
-    conn->discoverySocket =
-	openInterface(conn->ifName, Eth_PPPOE_Discovery, conn->myEth);
+    /* Skip discovery? */
+    if (conn->skipDiscovery) {
+	conn->discoveryState = STATE_SESSION;
+	if (conn->killSession) {
+	    sendPADT(conn, "RP-PPPoE: Session killed manually");
+	    exit(0);
+	}
+	return;
+    }
 
+  SEND_PADI:
+    padiAttempts = 0;
     do {
+#ifdef PLUGIN
+	if (got_sigterm || got_sighup) return;
+#endif
 	padiAttempts++;
 	if (padiAttempts > MAX_PADI_ATTEMPTS) {
-	    warn("Timeout waiting for PADO packets");
-	    close(conn->discoverySocket);
-	    conn->discoverySocket = -1;
-	    return;
+	    if (persist) {
+		padiAttempts = 0;
+		timeout = conn->discoveryTimeout;
+		printErr("Timeout waiting for PADO packets");
+	    } else {
+#ifdef PLUGIN
+		printErr("Timeout waiting for PADO packets");
+		return;
+#else
+		rp_fatal("Timeout waiting for PADO packets");
+#endif
+	    }
 	}
 	sendPADI(conn);
 	conn->discoveryState = STATE_SENT_PADI;
 	waitForPADO(conn, timeout);
 
-	timeout *= 2;
+	/* If we're just probing for access concentrators, don't do
+	   exponential backoff.  This reduces the time for an unsuccessful
+	   probe to 15 seconds. */
+	if (!conn->printACNames) {
+	    timeout *= 2;
+	}
+	if (conn->printACNames && conn->numPADOs) {
+	    break;
+	}
     } while (conn->discoveryState == STATE_SENT_PADI);
 
+    /* If we're only printing access concentrator names, we're done */
+    if (conn->printACNames) {
+	exit(0);
+    }
+
     timeout = conn->discoveryTimeout;
+    padrAttempts = 0;
     do {
+#ifdef PLUGIN
+	if (got_sigterm || got_sighup) return;
+#endif
 	padrAttempts++;
 	if (padrAttempts > MAX_PADI_ATTEMPTS) {
-	    warn("Timeout waiting for PADS packets");
-	    close(conn->discoverySocket);
-	    conn->discoverySocket = -1;
-	    return;
+	    if (persist) {
+		padrAttempts = 0;
+		timeout = conn->discoveryTimeout;
+		printErr("Timeout waiting for PADS packets");
+		/* Go back to sending PADI again */
+		goto SEND_PADI;
+	    } else {
+#ifdef PLUGIN
+		printErr("Timeout waiting for PADS packets");
+		return;
+#else
+		rp_fatal("Timeout waiting for PADS packets");
+#endif
+	    }
 	}
 	sendPADR(conn);
 	conn->discoveryState = STATE_SENT_PADR;
@@ -678,14 +838,13 @@ discovery(PPPoEConnection *conn)
 	timeout *= 2;
     } while (conn->discoveryState == STATE_SENT_PADR);
 
+#ifdef PLUGIN
     if (!conn->seenMaxPayload) {
 	/* RFC 4638: MUST limit MTU/MRU to 1492 */
-	if (lcp_allowoptions[0].mru > ETH_PPPOE_MTU)
-	    lcp_allowoptions[0].mru = ETH_PPPOE_MTU;
-	if (lcp_wantoptions[0].mru > ETH_PPPOE_MTU)
-	    lcp_wantoptions[0].mru = ETH_PPPOE_MTU;
+	if (lcp_allowoptions[0].mru > ETH_PPPOE_MTU) lcp_allowoptions[0].mru = ETH_PPPOE_MTU;
+	if (lcp_wantoptions[0].mru > ETH_PPPOE_MTU)  lcp_wantoptions[0].mru = ETH_PPPOE_MTU;
     }
-
+#endif
     /* We're done. */
     conn->discoveryState = STATE_SESSION;
     return;

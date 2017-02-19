@@ -1,5 +1,6 @@
-/* config.h.  Generated automatically by configure.  */
+/* config.h.  Generated from config.h.in by configure.  */
 /* config.h.in.  Generated automatically from configure.in by autoheader.  */
+/* LIC: GPL */
 
 /* Define to empty if the keyword does not work.  */
 /* #undef const */
@@ -130,3 +131,14 @@
 
 /* Define if you have the N_HDLC line discipline in linux/termios.h */
 #define HAVE_N_HDLC 1
+
+/* Define if bitfields are packed in reverse order */
+#define PACK_BITFIELDS_REVERSED 1
+
+/* Define to include debugging code */
+/* #undef DEBUGGING_ENABLED */
+
+/* Solaris moans if we don't do this... */
+#ifdef __sun
+#define __EXTENSIONS__ 1
+#endif

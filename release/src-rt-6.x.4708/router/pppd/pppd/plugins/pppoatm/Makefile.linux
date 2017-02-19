@@ -12,7 +12,7 @@ LIBDIR = $(DESTDIR)/lib/pppd/$(VERSION)
 VERSION = $(shell awk -F '"' '/VERSION/ { print $$2; }' ../../patchlevel.h)
 
 PLUGIN := pppoatm.so
-PLUGIN_OBJS := pppoatm.o 
+PLUGIN_OBJS := pppoatm.o
 
 #*******
 # Do we have the ATM libraries installed? Set HAVE_LIBATM to use them,

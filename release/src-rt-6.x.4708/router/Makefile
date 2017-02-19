@@ -1321,7 +1321,7 @@ pppd/Makefile: pppd/linux/Makefile.top
 
 pppd: pppd/Makefile kernel_header
 	@$(SEP)
-	@$(MAKE) -C pppd KERNELDIR=$(LINUXDIR) MFLAGS='$(if $(TCONFIG_IPV6),HAVE_INET6=y,) EXTRACFLAGS="$(EXTRACFLAGS) "'
+	@$(MAKE) -C pppd KERNELDIR=$(LINUXDIR) MFLAGS='$(if $(TCONFIG_IPV6),HAVE_INET6=y,) EXTRACFLAGS="$(EXTRACFLAGS) -idirafter $(LINUXDIR)/include $(if $(TCONFIG_VPNC),-DRTCONFIG_VPNC,)"'
 
 pppd-clean:
 	-@$(MAKE) -C pppd clean

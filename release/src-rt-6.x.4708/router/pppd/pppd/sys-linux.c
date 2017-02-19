@@ -205,6 +205,7 @@ static char loop_name[20];
 static unsigned char inbuf[512]; /* buffer for chars read from loopback */
 
 static int	if_is_up;	/* Interface has been marked up */
+static int	if6_is_up;	/* Interface has been marked up for IPv6, to help differentiate */
 static int	have_default_route;	/* Gateway for default route added */
 static u_int32_t proxy_arp_addr;	/* Addr for proxy arp entry added */
 static char proxy_arp_dev[16];		/* Device for proxy arp entry */
@@ -239,6 +240,7 @@ static void decode_version (char *buf, int *version, int *mod, int *patch);
 static int set_kdebugflag(int level);
 static int ppp_registered(void);
 static int make_ppp_unit(void);
+static int setifstate (int u, int state);
 
 extern u_char	inpacket_buf[];	/* borrowed from main.c */
 
@@ -338,6 +340,11 @@ void sys_cleanup(void)
 	if_is_up = 0;
 	sifdown(0);
     }
+#ifdef INET6
+    if (if6_is_up)
+	sif6down(0);
+#endif /* INET6 */
+
 /*
  * Delete any routes through the device.
  */
@@ -974,6 +981,9 @@ void set_up_tty(int tty_fd, int local)
     default:
 	break;
     }
+
+    if (stop_bits >= 2)
+	tios.c_cflag |= CSTOPB;
 
     speed = translate_speed(inspeed);
     if (speed) {
@@ -1634,9 +1644,6 @@ int sifdefaultroute (int unit, u_int32_t ouraddr, u_int32_t gateway)
     memset (&rt, 0, sizeof (rt));
     SET_SA_FAMILY (rt.rt_dst, AF_INET);
 
-    SET_SA_FAMILY(rt.rt_gateway, AF_INET);
-    SIN_ADDR(rt.rt_gateway) = gateway;
-
     rt.rt_dev = ifname;
 
     if (kernel_version > KVERSION(2,1,0)) {
@@ -1644,7 +1651,7 @@ int sifdefaultroute (int unit, u_int32_t ouraddr, u_int32_t gateway)
 	SIN_ADDR(rt.rt_genmask) = 0L;
     }
 
-    rt.rt_flags = RTF_UP | RTF_GATEWAY;
+    rt.rt_flags = RTF_UP;
     if (ioctl(sock_fd, SIOCADDRT, &rt) < 0) {
 	if ( ! ok_error ( errno ))
 	    error("default route ioctl(SIOCADDRT): %m");
@@ -2030,7 +2037,7 @@ ppp_registered(void)
 
 int ppp_available(void)
 {
-    int s, ok, fd, err;
+    int s, ok, fd;
     struct ifreq ifr;
     int    size;
     int    my_version, my_modification, my_patch;
@@ -2053,7 +2060,6 @@ int ppp_available(void)
 	close(fd);
 	return 1;
     }
-    err = errno;
 
     if (kernel_version >= KVERSION(2,3,13)) {
 	error("Couldn't open the /dev/ppp device: %m");
@@ -2160,6 +2166,7 @@ int ppp_available(void)
     return ok;
 }
 
+#ifndef HAVE_LOGWTMP
 /********************************************************************
  *
  * Update the wtmp file with the appropriate user name and tty device.
@@ -2235,7 +2242,7 @@ void logwtmp (const char *line, const char *name, const char *host)
 #endif
 #endif
 }
-
+#endif /* HAVE_LOGWTMP */
 
 /********************************************************************
  *
@@ -2247,9 +2254,10 @@ int sifvjcomp (int u, int vjcomp, int cidcomp, int maxcid)
 	u_int x;
 
 	if (vjcomp) {
-		if (ioctl(ppp_dev_fd, PPPIOCSMAXCID, (caddr_t) &maxcid) < 0)
+		if (ioctl(ppp_dev_fd, PPPIOCSMAXCID, (caddr_t) &maxcid) < 0) {
 			error("Couldn't set up TCP header compression: %m");
-		vjcomp = 0;
+			vjcomp = 0;
+		}
 	}
 
 	x = (vjcomp? SC_COMP_TCP: 0) | (cidcomp? 0: SC_NO_TCP_CCID);
@@ -2260,30 +2268,58 @@ int sifvjcomp (int u, int vjcomp, int cidcomp, int maxcid)
 
 /********************************************************************
  *
+ * sifname - Config the interface name.
+ */
+int sifname (int unit, const char *newname)
+{
+    struct ifreq ifr;
+    int ifindex;
+
+    if (strcmp(ifname, newname) == 0)
+	return 1;
+
+    memset(&ifr, 0, sizeof(ifr));
+    strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+
+    /* Get and keep interface index */
+    if (ioctl(sock_fd, SIOCGIFINDEX, (caddr_t) &ifr) < 0) {
+	error("ioctl (SIOCGIFINDEX): %m (line %d)", __LINE__);
+	return 0;
+    }
+    ifindex = ifr.ifr_ifindex;
+
+    /* Set new interface name, patterns such as "vpn%d" are allowed
+     * by kernel, the lowest available slot will be used */
+    strlcpy(ifr.ifr_newname, newname, sizeof(ifr.ifr_newname));
+    if (ioctl(sock_fd, SIOCSIFNAME, (caddr_t) &ifr) < 0) {
+	error("Couldn't set interface name %s: %m", ifr.ifr_newname);
+	return 0;
+    }
+
+    /* Get new interface name back */
+    ifr.ifr_ifindex = ifindex;
+    if (ioctl(sock_fd, SIOCGIFNAME, (caddr_t) &ifr) < 0) {
+	error("ioctl (SIOCGIFNAME): %m (line %d)", __LINE__);
+        return 0;
+    }
+
+    strcpy(ifname, ifr.ifr_name);
+    return 1;
+}
+
+/********************************************************************
+ *
  * sifup - Config the interface up and enable IP packets to pass.
  */
 
 int sifup(int u)
 {
-    struct ifreq ifr;
+    int ret;
 
-    memset (&ifr, '\0', sizeof (ifr));
-    strlcpy(ifr.ifr_name, ifname, sizeof (ifr.ifr_name));
-    if (ioctl(sock_fd, SIOCGIFFLAGS, (caddr_t) &ifr) < 0) {
-	if (! ok_error (errno))
-	    error("ioctl (SIOCGIFFLAGS): %m (line %d)", __LINE__);
-	return 0;
-    }
+    if ((ret = setifstate(u, 1)))
+	if_is_up++;
 
-    ifr.ifr_flags |= (IFF_UP | IFF_POINTOPOINT);
-    if (ioctl(sock_fd, SIOCSIFFLAGS, (caddr_t) &ifr) < 0) {
-	if (! ok_error (errno))
-	    error("ioctl(SIOCSIFFLAGS): %m (line %d)", __LINE__);
-	return 0;
-    }
-    if_is_up++;
-
-    return 1;
+    return ret;
 }
 
 /********************************************************************
@@ -2294,10 +2330,58 @@ int sifup(int u)
 
 int sifdown (int u)
 {
-    struct ifreq ifr;
-
     if (if_is_up && --if_is_up > 0)
 	return 1;
+
+#ifdef INET6
+    if (if6_is_up)
+	return 1;
+#endif /* INET6 */
+
+    return setifstate(u, 0);
+}
+
+#ifdef INET6
+/********************************************************************
+ *
+ * sif6up - Config the interface up for IPv6
+ */
+
+int sif6up(int u)
+{
+    int ret;
+
+    if ((ret = setifstate(u, 1)))
+	if6_is_up = 1;
+
+    return ret;
+}
+
+/********************************************************************
+ *
+ * sif6down - Disable the IPv6CP protocol and config the interface
+ *	      down if there are no remaining protocols.
+ */
+
+int sif6down (int u)
+{
+    if6_is_up = 0;
+
+    if (if_is_up)
+	return 1;
+
+    return setifstate(u, 0);
+}
+#endif /* INET6 */
+
+/********************************************************************
+ *
+ * setifstate - Config the interface up or down
+ */
+
+static int setifstate (int u, int state)
+{
+    struct ifreq ifr;
 
     memset (&ifr, '\0', sizeof (ifr));
     strlcpy(ifr.ifr_name, ifname, sizeof (ifr.ifr_name));
@@ -2307,7 +2391,10 @@ int sifdown (int u)
 	return 0;
     }
 
-    ifr.ifr_flags &= ~IFF_UP;
+    if (state)
+	ifr.ifr_flags |= IFF_UP;
+    else
+	ifr.ifr_flags &= ~IFF_UP;
     ifr.ifr_flags |= IFF_POINTOPOINT;
     if (ioctl(sock_fd, SIOCSIFFLAGS, (caddr_t) &ifr) < 0) {
 	if (! ok_error (errno))
@@ -2892,7 +2979,7 @@ ether_to_eui64(eui64_t *p_eui64)
     /*
      * And convert the EUI-48 into EUI-64, per RFC 2472 [sec 4.1]
      */
-    ptr = ifr.ifr_hwaddr.sa_data;
+    ptr = (unsigned char *) ifr.ifr_hwaddr.sa_data;
     p_eui64->e8[0] = ptr[0] | 0x02;
     p_eui64->e8[1] = ptr[1];
     p_eui64->e8[2] = ptr[2];
