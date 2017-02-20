@@ -1345,12 +1345,12 @@ endif
 
 libpcap: libpcap/Makefile
 	@$(SEP)
-	@$(MAKE) -C libpcap 
+	@$(MAKE) -C libpcap
 
-libpcap/Makefile: 
+libpcap/Makefile:
 	cd libpcap && CFLAGS="-g -O2 -ffunction-sections -fdata-sections $(EXTRACFLAGS) "  \
 	 KDIR=$(LINUXDIR) $(CONFIGURE) --disable-yydebug --with-pcap=linux --without-septel \
-	--without-dag --without-libnl --without-snf --disable-can  --disable-canusb  --disable-dbus 
+	--without-dag --without-libnl --without-snf --disable-can  --disable-canusb  --disable-dbus
 
 libpcap-clean:
 	-@$(MAKE) -C libpcap clean
@@ -1937,6 +1937,7 @@ pcre/stamp-h1:
 	$(SEP)
 	cd pcre && \
 	CC=$(CC) CXX=$(HOST)-g++ AR=$(AR) RANLIB=$(RANLIB) LD=$(LD) CFLAGS="-Os -Wall $(EXTRACFLAGS)" \
+	autoreconf ; \
 	$(CONFIGURE) --prefix=/usr --disable-dependency-tracking --enable-utf8 --enable-unicode-properties --disable-cpp
 	@touch pcre/stamp-h1
 	[ -d pcre/m4 ] || mkdir pcre/m4
@@ -2013,7 +2014,7 @@ libpng-clean:
 php/stamp-h1: pcre zlib libiconv sqlite libxml2 libpng jpeg libcurl
 	@$(SEP)
 	cd php && CC=$(CC) CXX=$(ARCH)-g++ AR=$(AR) RANLIB=$(RANLIB) LD=$(LD) \
-	CFLAGS="-Os -Wall -I$(TOP)/zlib -I$(TOP)/libxml2/include/libxml -I$(TOP)/libxml2/include -I$(TOP)/pcre -I$(TOP)/libiconv/include \
+	CFLAGS="-Os -Wall -I$(TOP)/zlib -I$(TOP)/libxml2/include -I$(TOP)/libxml2/include/libxml  -I$(TOP)/pcre -I$(TOP)/libiconv/include \
 		-I$(TOP)/libpng/staged/usr/include -I$(TOP)/libcurl/staged/include" \
 	LDFLAGS="-L$(TOP)/pcre/.libs -L$(TOP)/sqlite/.libs -L$(TOP)/zlib -L$(TOP)/libxml2/.libs -L$(TOP)/libiconv/lib/.libs \
 		-L$(TOP)/libpng/.libs -L$(TOP)/libcurl/staged/lib" \
@@ -2024,6 +2025,7 @@ php/stamp-h1: pcre zlib libiconv sqlite libxml2 libpng jpeg libcurl
 	YACC=/usr/local/bin/yacc-2.7 \
 	ac_cv_func_memcmp_working=yes \
 	cv_php_mbstring_stdarg=yes \
+	ac_libxml_dir=$(TOP)/libxml2 \
 	$(CONFIGURE) --prefix=/usr \
 	--enable-shared \
 	--disable-static \
@@ -2033,7 +2035,7 @@ php/stamp-h1: pcre zlib libiconv sqlite libxml2 libpng jpeg libcurl
 	--with-config-file-path=/etc \
 	--with-config-file-scan-dir=/etc/php5 \
 	--disable-short-tags \
-	--with-zlib \
+	--with-zlib="$(TOP)/zlib/staged/usr" \
 	--with-zlib-dir="$(TOP)/zlib/staged/usr" \
 	--disable-phar \
 	--enable-cli \
@@ -2229,7 +2231,7 @@ mysql/stamp-h1: openssl zlib libncurses
 		--with-low-memory \
 		--enable-assembler \
 		--with-zlib-dir="$(TOP)/zlib/staged/usr"
-		
+
 	cd mysql && tar xvfz .host.tgz
 	# Update time of config.status to avoid run 'config.status --recheck'
 	touch mysql/config.status
@@ -2828,8 +2830,9 @@ libmnl-clean:
 	-@rm -rf libmnl/staged
 
 # --with-kmod=no --with-kbuild="$(LINUXDIR)" autoreconf &&--with-kmod=yes
+# && autoreconf -i -f &&
 ipset6/stamp-h1: libmnl
-	cd $(TOP)/ipset && CC=$(CC) STRIP=$(STRIP)  && autoreconf -i -f && \
+	cd $(TOP)/ipset && CC=$(CC) STRIP=$(STRIP) && ./autogen.sh && \
 	CFLAGS="-Os -Wall $(EXTRACFLAGS) -ffunction-sections -fdata-sections" \
 	LDFLAGS="-ffunction-sections -fdata-sections -Wl,--gc-sections" \
 	libmnl_CFLAGS="-I$(TOP)/libmnl/staged/usr/include" \
@@ -2858,7 +2861,7 @@ ipset6-clean:
 
 #ipset 4.5
 ipset: libmnl
-	$(MAKE) -C ipset KERNEL_DIR=$(LINUXDIR) binaries $(PARALLEL_BUILD) 
+	$(MAKE) -C ipset KERNEL_DIR=$(LINUXDIR) binaries $(PARALLEL_BUILD)
 
 #ipset 4.5
 ipset-install: ipset
