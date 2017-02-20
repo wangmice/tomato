@@ -5,7 +5,7 @@ INSTALL_DATA = $(INSTALL) -m 644
 DEFS = -DPHP_ATOM_INC -I$(top_builddir)/include -I$(top_builddir)/main -I$(top_srcdir)
 COMMON_FLAGS = $(DEFS) $(INCLUDES) $(EXTRA_INCLUDES) $(CPPFLAGS) $(PHP_FRAMEWORKPATH)
 
-all: $(all_targets) 
+all: $(all_targets)
 	@echo
 	@echo "Build complete."
 	@echo "Don't forget to run 'make test'."
@@ -112,7 +112,7 @@ test: all
 clean:
 	find . -name \*.gcno -o -name \*.gcda | xargs rm -f
 	find . -name \*.lo -o -name \*.o | xargs rm -f
-	find . -name \*.la -o -name \*.a | xargs rm -f 
+	find . -name \*.la -o -name \*.a | xargs rm -f
 	find . -name \*.so | xargs rm -f
 	find . -name .libs -a -type d|xargs rm -rf
 	find . -name \*.1 | xargs rm -f

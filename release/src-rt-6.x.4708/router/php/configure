@@ -22054,8 +22054,8 @@ $as_echo "$ac_cv_php_xml2_config_path" >&6; }
     IFS=$ac_IFS
     LIBXML_VERSION=`expr $1 \* 1000000 + $2 \* 1000 + $3`
     if test "$LIBXML_VERSION" -ge "2006011"; then
-      LIBXML_LIBS=`$XML2_CONFIG --libs`
-      LIBXML_INCS=`$XML2_CONFIG --cflags`
+		LIBXML_LIBS=`$XML2_CONFIG --prefix=$PHP_LIBXML_DIR --libs`
+		LIBXML_INCS=`$XML2_CONFIG --prefix=$PHP_LIBXML_DIR --cflags`
 
   for ac_i in $LIBXML_LIBS; do
     case $ac_i in
@@ -33836,9 +33836,8 @@ $as_echo "$ac_cv_php_xml2_config_path" >&6; }
     IFS=$ac_IFS
     LIBXML_VERSION=`expr $1 \* 1000000 + $2 \* 1000 + $3`
     if test "$LIBXML_VERSION" -ge "2006011"; then
-      LIBXML_LIBS=`$XML2_CONFIG --libs`
-      LIBXML_INCS=`$XML2_CONFIG --cflags`
-
+		LIBXML_LIBS=`$XML2_CONFIG --prefix=$PHP_LIBXML_DIR --libs`
+		LIBXML_INCS=`$XML2_CONFIG --prefix=$PHP_LIBXML_DIR --cflags`
   for ac_i in $LIBXML_LIBS; do
     case $ac_i in
     -pthread)
@@ -82890,9 +82889,8 @@ $as_echo "$ac_cv_php_xml2_config_path" >&6; }
     IFS=$ac_IFS
     LIBXML_VERSION=`expr $1 \* 1000000 + $2 \* 1000 + $3`
     if test "$LIBXML_VERSION" -ge "2006011"; then
-      LIBXML_LIBS=`$XML2_CONFIG --libs`
-      LIBXML_INCS=`$XML2_CONFIG --cflags`
-
+		LIBXML_LIBS=`$XML2_CONFIG --prefix=$PHP_LIBXML_DIR --libs`
+		LIBXML_INCS=`$XML2_CONFIG --prefix=$PHP_LIBXML_DIR --cflags`
   for ac_i in $LIBXML_LIBS; do
     case $ac_i in
     -pthread)
@@ -84404,8 +84402,8 @@ $as_echo "$ac_cv_php_xml2_config_path" >&6; }
     IFS=$ac_IFS
     LIBXML_VERSION=`expr $1 \* 1000000 + $2 \* 1000 + $3`
     if test "$LIBXML_VERSION" -ge "2006011"; then
-      LIBXML_LIBS=`$XML2_CONFIG --libs`
-      LIBXML_INCS=`$XML2_CONFIG --cflags`
+		LIBXML_LIBS=`$XML2_CONFIG --prefix=$PHP_LIBXML_DIR --libs`
+		LIBXML_INCS=`$XML2_CONFIG --prefix=$PHP_LIBXML_DIR --cflags`
 
   for ac_i in $LIBXML_LIBS; do
     case $ac_i in
@@ -94152,8 +94150,8 @@ $as_echo "$ac_cv_php_xml2_config_path" >&6; }
     IFS=$ac_IFS
     LIBXML_VERSION=`expr $1 \* 1000000 + $2 \* 1000 + $3`
     if test "$LIBXML_VERSION" -ge "2006011"; then
-      LIBXML_LIBS=`$XML2_CONFIG --libs`
-      LIBXML_INCS=`$XML2_CONFIG --cflags`
+		LIBXML_LIBS=`$XML2_CONFIG --prefix=$PHP_LIBXML_DIR --libs`
+		LIBXML_INCS=`$XML2_CONFIG --prefix=$PHP_LIBXML_DIR --cflags`
 
   for ac_i in $LIBXML_LIBS; do
     case $ac_i in
@@ -94999,8 +94997,8 @@ $as_echo "$ac_cv_php_xml2_config_path" >&6; }
     IFS=$ac_IFS
     LIBXML_VERSION=`expr $1 \* 1000000 + $2 \* 1000 + $3`
     if test "$LIBXML_VERSION" -ge "2006011"; then
-      LIBXML_LIBS=`$XML2_CONFIG --libs`
-      LIBXML_INCS=`$XML2_CONFIG --cflags`
+		LIBXML_LIBS=`$XML2_CONFIG --prefix=$PHP_LIBXML_DIR --libs`
+		LIBXML_INCS=`$XML2_CONFIG --prefix=$PHP_LIBXML_DIR --cflags`
 
   for ac_i in $LIBXML_LIBS; do
     case $ac_i in
@@ -95789,8 +95787,8 @@ $as_echo "$ac_cv_php_xml2_config_path" >&6; }
     IFS=$ac_IFS
     LIBXML_VERSION=`expr $1 \* 1000000 + $2 \* 1000 + $3`
     if test "$LIBXML_VERSION" -ge "2006011"; then
-      LIBXML_LIBS=`$XML2_CONFIG --libs`
-      LIBXML_INCS=`$XML2_CONFIG --cflags`
+		LIBXML_LIBS=`$XML2_CONFIG --prefix=$PHP_LIBXML_DIR --libs`
+		LIBXML_INCS=`$XML2_CONFIG --prefix=$PHP_LIBXML_DIR --cflags`
 
   for ac_i in $LIBXML_LIBS; do
     case $ac_i in
@@ -96503,8 +96501,8 @@ $as_echo "$ac_cv_php_xml2_config_path" >&6; }
     IFS=$ac_IFS
     LIBXML_VERSION=`expr $1 \* 1000000 + $2 \* 1000 + $3`
     if test "$LIBXML_VERSION" -ge "2006011"; then
-      LIBXML_LIBS=`$XML2_CONFIG --libs`
-      LIBXML_INCS=`$XML2_CONFIG --cflags`
+		LIBXML_LIBS=`$XML2_CONFIG --prefix=$PHP_LIBXML_DIR --libs`
+		LIBXML_INCS=`$XML2_CONFIG --prefix=$PHP_LIBXML_DIR --cflags`
 
   for ac_i in $LIBXML_LIBS; do
     case $ac_i in
@@ -98827,8 +98825,9 @@ $as_echo "$ac_cv_php_xml2_config_path" >&6; }
     IFS=$ac_IFS
     LIBXML_VERSION=`expr $1 \* 1000000 + $2 \* 1000 + $3`
     if test "$LIBXML_VERSION" -ge "2006011"; then
-      LIBXML_LIBS=`$XML2_CONFIG --libs`
-      LIBXML_INCS=`$XML2_CONFIG --cflags`
+		LIBXML_LIBS=`$XML2_CONFIG --prefix=$PHP_LIBXML_DIR --libs`
+		LIBXML_INCS=`$XML2_CONFIG --prefix=$PHP_LIBXML_DIR --cflags`
+		#LIBXML_INCS=`$XML2_CONFIG --prefix=$PHP_LIBXML_DIR --cflags`
 
   for ac_i in $LIBXML_LIBS; do
     case $ac_i in
@@ -114910,5 +114909,3 @@ if test -n "$ac_unrecognized_opts" && test "$enable_option_checking" != no; then
   { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: unrecognized options: $ac_unrecognized_opts" >&5
 $as_echo "$as_me: WARNING: unrecognized options: $ac_unrecognized_opts" >&2;}
 fi
-
-
