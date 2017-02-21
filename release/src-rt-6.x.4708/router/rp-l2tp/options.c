@@ -14,7 +14,7 @@
 ***********************************************************************/
 
 static char const RCSID[] =
-"$Id: options.c,v 1.1.48.1 2005/08/08 12:05:25 honor Exp $";
+"$Id: options.c 3323 2011-09-21 18:45:48Z lly.dev $";
 
 #include "l2tp.h"
 #include <string.h>
@@ -137,7 +137,7 @@ set_option(EventSelector *es,
 	    free(* (char **) desc->addr);
 	}
 	* (char **) desc->addr = strdup(value);
-	if (! * (char *) desc->addr) {
+	if (! * (char **) desc->addr) {
 	    l2tp_set_errmsg("Out of memory");
 	    return -1;
 	}

@@ -14,7 +14,7 @@
 ***********************************************************************/
 
 static char const RCSID[] =
-"$Id: utils.c,v 1.1.48.1 2005/08/08 12:05:25 honor Exp $";
+"$Id: utils.c 3323 2011-09-21 18:45:48Z lly.dev $";
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -199,7 +199,8 @@ l2tp_load_handler(EventSelector *es,
     if (*fname == '/') {
 	handle = dlopen(fname, RTLD_NOW);
     } else {
-	snprintf(buf, sizeof(buf), "%s/lib/l2tp/%s", PREFIX, fname); //2005-04-14 by kanki
+	/* ASUS snprintf(buf, sizeof(buf), PREFIX"/lib/l2tp/plugins/%s", fname); */
+	snprintf(buf, sizeof(buf), PREFIX"/lib/l2tp/%s", fname);
 	buf[sizeof(buf)-1] = 0;
 	handle = dlopen(buf, RTLD_NOW);
     }

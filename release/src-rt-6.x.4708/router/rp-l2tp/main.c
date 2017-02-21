@@ -14,7 +14,7 @@
 ***********************************************************************/
 
 static char const RCSID[] =
-"$Id: main.c,v 1.1.48.1 2005/08/08 12:05:25 honor Exp $";
+"$Id: main.c 4262 2012-05-24 15:41:48Z themiron.ru $";
 
 #include "l2tp.h"
 #include <stdio.h>
@@ -33,6 +33,8 @@ usage(int argc, char *argv[], int exitcode)
     fprintf(stderr, "Usage: %s [options]\n", argv[0]);
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "-d level               -- Set debugging to 'level'\n");
+    fprintf(stderr, "-c file                -- Set config file\n");
+    fprintf(stderr, "-p                     -- Set pid file\n");
     fprintf(stderr, "-f                     -- Do not fork\n");
     fprintf(stderr, "-h                     -- Print usage\n");
     fprintf(stderr, "\nThis program is licensed under the terms of\nthe GNU General Public License, Version 2.\n");
@@ -42,8 +44,61 @@ usage(int argc, char *argv[], int exitcode)
 static void
 sighandler(int signum)
 {
-    l2tp_cleanup();
+    static int count = 0;
+
+    count++;
+    fprintf(stderr, "Caught signal %d times\n", count);
+    if (count < 5) {
+	l2tp_cleanup();
+    }
     exit(EXIT_FAILURE);
+}
+
+static void
+pidfile_cleanup(void *data)
+{
+    char *fname = (char *) data;
+
+    unlink(fname);
+}
+
+static int
+pidfile_check(char const *fname)
+{
+    FILE *fp;
+    pid_t pid;
+
+    fp = fopen(fname, "r");
+    if (fp) {
+	/* Check if the previous server process is still running */
+	if (fscanf(fp, "%d", &pid) == 1 &&
+	    pid && pid != getpid() && kill(pid, 0) == 0) {
+	    l2tp_set_errmsg("pidfile_check: there's already a l2tpd running.");
+	    fclose(fp);
+	    return -1;
+	}
+	fclose(fp);
+    }
+
+    return 0;
+}
+
+static void
+pidfile_init(char const *fname)
+{
+    FILE *fp;
+
+    unlink(fname);
+    fp = fopen(fname, "w");
+    if (!fp) {
+	l2tp_set_errmsg("pidfile_init: can't create pid file '%s'", fname);
+	return;
+    }
+
+    fprintf(fp, "%d\n", getpid());
+    fclose(fp);
+
+    l2tp_register_shutdown_handler(pidfile_cleanup, (void *) fname);
 }
 
 int
@@ -54,8 +109,11 @@ main(int argc, char *argv[])
     int opt;
     int do_fork = 1;
     int debugmask = 0;
+    /* ASUS char *config_file = SYSCONFDIR"/l2tp/l2tp.conf"; */
+    char *config_file = SYSCONFDIR"/l2tp.conf";
+    char *pidfile = "/var/run/l2tpd.pid";
 
-    while((opt = getopt(argc, argv, "d:fh")) != -1) {
+    while((opt = getopt(argc, argv, "d:c:p:fh")) != -1) {
 	switch(opt) {
 	case 'h':
 	    usage(argc, argv, EXIT_SUCCESS);
@@ -63,9 +121,15 @@ main(int argc, char *argv[])
 	case 'f':
 	    do_fork = 0;
 	    break;
+	case 'p':
+	    pidfile = optarg;
+	    break;
 	case 'd':
 	    sscanf(optarg, "%d", &debugmask);
 	    break;
+        case 'c':
+            config_file = optarg;
+            break;
 	default:
 	    usage(argc, argv, EXIT_FAILURE);
 	}
@@ -77,11 +141,15 @@ main(int argc, char *argv[])
     l2tp_peer_init();
     l2tp_debug_set_bitmask(debugmask);
 
-    if (l2tp_parse_config_file(es, "/tmp/l2tp.conf") < 0) { //2005-04-14 by kanki
+    if (pidfile_check(pidfile) < 0) {
 	l2tp_die();
     }
 
-    if (!l2tp_network_init(es)) {
+    if (l2tp_parse_config_file(es, config_file) < 0) {
+	l2tp_die();
+    }
+
+    if (l2tp_network_init(es) < 0) {
 	l2tp_die();
     }
 
@@ -112,7 +180,7 @@ main(int argc, char *argv[])
 	for (i=0; i<3; i++) {
 	    close(i);
 	}
-	i = open("/dev/console", O_RDWR); //2005-04-14 by kanki for debugging
+	i = open("/dev/null", O_RDWR);
 	if (i >= 0) {
 	    dup2(i, 0);
 	    dup2(i, 1);
@@ -121,8 +189,10 @@ main(int argc, char *argv[])
 	}
     }
 
-    signal(SIGTERM, sighandler);
-    signal(SIGINT, sighandler);
+    pidfile_init(pidfile);
+
+    Event_HandleSignal(es, SIGINT, sighandler);
+    Event_HandleSignal(es, SIGTERM, sighandler);
 
     while(1) {
 	i = Event_HandleEvent(es);
