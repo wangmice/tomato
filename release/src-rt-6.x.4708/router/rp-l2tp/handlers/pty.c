@@ -14,7 +14,7 @@
 ***********************************************************************/
 
 static char const RCSID[] =
-"$Id: pty.c,v 1.1.48.1 2005/08/08 12:05:25 honor Exp $";
+"$Id: pty.c 3323 2011-09-21 18:45:48Z lly.dev $";
 
 #include "../l2tp.h"
 #include <sys/ioctl.h>

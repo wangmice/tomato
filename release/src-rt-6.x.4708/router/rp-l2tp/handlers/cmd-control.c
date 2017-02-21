@@ -14,7 +14,7 @@
 ***********************************************************************/
 
 static char const RCSID[] =
-"$Id: cmd-control.c,v 1.1.48.1 2005/08/08 12:05:25 honor Exp $";
+"$Id: cmd-control.c 3323 2011-09-21 18:45:48Z lly.dev $";
 #include <stdio.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -38,7 +38,7 @@ static char const RCSID[] =
 *  Sends a command to the server
 ***********************************************************************/
 static int
-send_cmd(char const *cmd)
+send_cmd(char const *cmd, char const *sockpath)
 {
     struct sockaddr_un addr;
     int fd;
@@ -52,7 +52,7 @@ send_cmd(char const *cmd)
 
     memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_LOCAL;
-    strncpy(addr.sun_path, "/var/run/l2tpctrl", sizeof(addr.sun_path) - 1);
+    strncpy(addr.sun_path, sockpath, sizeof(addr.sun_path) - 1);
 
     fd = socket(AF_LOCAL, SOCK_STREAM, 0);
     if (fd < 0) {
@@ -72,19 +72,37 @@ send_cmd(char const *cmd)
     return fd;
 }
 
+static void
+usage(int argc, char *argv[], int exitcode)
+{
+    fprintf(stderr, "Usage: %s [-s socket] command\n", argv[0]);
+    exit(exitcode);
+}
+
 int
 main(int argc, char *argv[])
 {
     int fd;
     int n;
+    int opt;
     char buf[4096];
+    char *sockpath = "/var/run/l2tpctrl";
 
-    if (argc != 2) {
-	fprintf(stderr, "Usage: %s command\n", argv[0]);
-	return 1;
+    while((opt = getopt(argc, argv, "s:h")) != -1) {
+	switch(opt) {
+	case 's':
+	    sockpath = optarg;
+	    break;
+	default:
+	    usage(argc, argv, (opt == 'h') ? EXIT_SUCCESS : EXIT_FAILURE);
+	}
     }
 
-    fd = send_cmd(argv[1]);
+    if (optind >= argc) {
+	usage(argc, argv, EXIT_FAILURE);
+    }
+
+    fd = send_cmd(argv[optind], sockpath);
     if (fd < 0) {
 	return 1;
     }

@@ -14,7 +14,7 @@
 ***********************************************************************/
 
 static char const RCSID[] =
-"$Id: peer.c,v 1.1.48.1 2005/08/08 12:05:25 honor Exp $";
+"$Id: peer.c 3323 2011-09-21 18:45:48Z lly.dev $";
 
 #include "l2tp.h"
 #include <stddef.h>
@@ -60,6 +60,9 @@ static l2tp_opt_descriptor peer_opts[] = {
     { "holdoff",           OPT_TYPE_INT,      &prototype.holdoff},
     { "maxfail",           OPT_TYPE_INT,      &prototype.maxfail},
     { "strict-ip-check",   OPT_TYPE_BOOL,     &prototype.validate_peer_ip},
+#ifdef RTCONFIG_VPNC
+    { "vpnc",              OPT_TYPE_BOOL,     &vpnc},
+#endif
     { NULL,                OPT_TYPE_BOOL,     NULL }
 };
 

@@ -1,5 +1,5 @@
 # Generated automatically from Makefile.in by configure.
-# $Id: Makefile.in,v 1.1.48.1 2005/08/08 12:05:25 honor Exp $
+# $Id: Makefile.in 3323 2011-09-21 18:45:48Z lly.dev $
 #
 # Makefile for event-handling library
 #
@@ -35,6 +35,9 @@ event_tcp.o: event_tcp.c $(HDRS)
 
 clean: FORCE
 	rm -f *.a *.o *~
+
+distclean: clean
+	rm -f Makefile
 
 FORCE:
 

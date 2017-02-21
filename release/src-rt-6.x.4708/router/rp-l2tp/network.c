@@ -16,7 +16,7 @@
 ***********************************************************************/
 
 static char const RCSID[] =
-"$Id: network.c,v 1.1.48.1 2005/08/08 12:05:25 honor Exp $";
+"$Id: network.c 3323 2011-09-21 18:45:48Z lly.dev $";
 
 #include "l2tp.h"
 #include "event.h"
@@ -32,24 +32,7 @@ static char const RCSID[] =
 int Sock = -1;
 
 static EventHandler *NetworkReadHandler = NULL;
-static void network_readable(EventSelector *es,
-			     int fd,
-			     unsigned int flags,
-			     void *data);
-//char Hostname[MAX_HOSTNAME]; //2005-04-14 by kanki
-
-static void
-sigint_handler(int sig)
-{
-    static int count = 0;
-
-    count++;
-    fprintf(stderr, "In sigint handler: %d\n", count);
-    if (count < 5) {
-	l2tp_cleanup();
-    }
-    exit(1);
-}
+char Hostname[MAX_HOSTNAME];
 
 /**********************************************************************
 * %FUNCTION: network_init
@@ -67,10 +50,9 @@ l2tp_network_init(EventSelector *es)
     struct sockaddr_in me;
     int flags;
 
-    //gethostname(Hostname, sizeof(Hostname)); //2005-04-14 by kanki
-    //Hostname[sizeof(Hostname)-1] = 0;
+    gethostname(Hostname, sizeof(Hostname));
+    Hostname[sizeof(Hostname)-1] = 0;
 
-    Event_HandleSignal(es, SIGINT, sigint_handler);
     if (Sock >= 0) {
 	if (NetworkReadHandler) {
 	    Event_DelHandler(es, NetworkReadHandler);
@@ -84,6 +66,10 @@ l2tp_network_init(EventSelector *es)
 	l2tp_set_errmsg("network_init: socket: %s", strerror(errno));
 	return -1;
     }
+
+    flags = 1;
+    setsockopt(Sock, SOL_SOCKET, SO_REUSEADDR, &flags, sizeof(flags));
+    setsockopt(Sock, SOL_SOCKET, SO_NO_CHECK, &flags, sizeof(flags));
 
     me.sin_family = AF_INET;
     me.sin_addr = Settings.listen_addr;
@@ -118,16 +104,15 @@ l2tp_network_init(EventSelector *es)
 * %DESCRIPTION:
 *  Called when a packet arrives on the UDP socket.
 ***********************************************************************/
-static void
+void
 network_readable(EventSelector *es,
 		 int fd,
 		 unsigned int flags,
 		 void *data)
 {
     l2tp_dgram *dgram;
-
     struct sockaddr_in from;
-    dgram = l2tp_dgram_take_from_wire(&from);
+    dgram = l2tp_dgram_take_from_wire(fd, &from);
     if (!dgram) return;
 
     /* It's a control packet if we get here */
