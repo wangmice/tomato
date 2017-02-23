@@ -1391,8 +1391,19 @@ zebra-install: zebra
 	$(STRIP) $(INSTALLDIR)/zebra/usr/sbin/ripd
 	$(STRIP) $(INSTALLDIR)/zebra/usr/lib/libzebra.so
 
+rp-l2tp/stamp-h1: kernel_header
+	cd rp-l2tp && CFLAGS="-O2 -Wall $(EXTRACFLAGS) -idirafter $(LINUXDIR)/include $(if $(TCONFIG_VPNC), -DRTCONFIG_VPNC,)" \
+	$(CONFIGURE) --prefix=/usr --sysconfdir=/tmp
+	touch $@
 
-rp-l2tp-install:
+rp-l2tp: pppd rp-l2tp/stamp-h1
+	$(MAKE) -C rp-l2tp
+
+rp-l2tp-clean:
+	-@$(MAKE) -C rp-l2tp distclean
+	@rm -f rp-l2tp/stamp-h1
+
+rp-l2tp-install: rp-l2tp
 	install -d $(INSTALLDIR)/rp-l2tp/usr/lib/l2tp
 	install rp-l2tp/handlers/*.so $(INSTALLDIR)/rp-l2tp/usr/lib/l2tp
 	$(STRIP) $(INSTALLDIR)/rp-l2tp/usr/lib/l2tp/*.so
