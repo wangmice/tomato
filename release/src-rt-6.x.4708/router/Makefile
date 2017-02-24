@@ -1321,7 +1321,7 @@ pppd/Makefile: pppd/linux/Makefile.top
 
 pppd: pppd/Makefile kernel_header
 	@$(SEP)
-	@$(MAKE) -C pppd KERNELDIR=$(LINUXDIR) MFLAGS='$(if $(TCONFIG_IPV6),HAVE_INET6=y,) EXTRACFLAGS="$(EXTRACFLAGS) -idirafter $(LINUXDIR)/include $(if $(TCONFIG_VPNC),-DRTCONFIG_VPNC,)"'
+	@$(MAKE) -C pppd KERNELDIR=$(LINUXDIR) MFLAGS='$(if $(TCONFIG_IPV6),HAVE_INET6=y,) EXTRACFLAGS="$(EXTRACFLAGS) -idirafter $(LINUXDIR)/include $(if $(TCONFIG_VPNC),-DRTCONFIG_VPNC,) -ffunction-sections -fdata-sections"'
 
 pppd-clean:
 	-@$(MAKE) -C pppd clean
@@ -1332,6 +1332,12 @@ pppd-install: pppd
 	$(STRIP) $(INSTALLDIR)/pppd/usr/sbin/pppd
 	install -D pppd/chat/chat $(INSTALLDIR)/pppd/usr/sbin/chat
 	$(STRIP) $(INSTALLDIR)/pppd/usr/sbin/chat
+	install -D pppd/pppdump/pppdump $(INSTALLDIR)/pppd/usr/sbin/pppdump
+	$(STRIP) $(INSTALLDIR)/pppd/usr/sbin/pppdump
+	install -D pppd/pppstats/pppstats $(INSTALLDIR)/pppd/usr/sbin/pppstats
+	$(STRIP) $(INSTALLDIR)/pppd/usr/sbin/pppstats
+	install -D pppd/pppd/plugins/rp-pppoe/pppoe-discovery $(INSTALLDIR)/pppd/usr/sbin/pppoe-discovery
+	$(STRIP) $(INSTALLDIR)/pppd/usr/sbin/pppoe-discovery
 ifeq ($(TCONFIG_L2TP),y)
 	install -D pppd/pppd/plugins/pppol2tp/pppol2tp.so $(INSTALLDIR)/pppd/usr/lib/pppd/pppol2tp.so
 	$(STRIP) $(INSTALLDIR)/pppd/usr/lib/pppd/*.so
