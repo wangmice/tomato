@@ -72,7 +72,7 @@ obj-y += dnsmasq
 obj-y += etc
 # obj-y += vlan # use Busybox vconfig
 obj-y += pppd
-obj-y += rp-pppoe
+# obj-y += rp-pppoe
 obj-y += utils
 #obj-y += ntpclient #Asus version
 obj-y += ntpc
@@ -1338,6 +1338,9 @@ pppd-install: pppd
 	$(STRIP) $(INSTALLDIR)/pppd/usr/sbin/pppstats
 	install -D pppd/pppd/plugins/rp-pppoe/pppoe-discovery $(INSTALLDIR)/pppd/usr/sbin/pppoe-discovery
 	$(STRIP) $(INSTALLDIR)/pppd/usr/sbin/pppoe-discovery
+	install -D pppd/pppd/plugins/rp-pppoe/rp-pppoe.so $(INSTALLDIR)/pppd/usr/lib/pppd/rp-pppoe.so
+	install -D pppd/pppd/plugins/pppoatm/pppoatm.so   $(INSTALLDIR)/pppd/usr/lib/pppd/pppoatm.so
+	$(STRIP) $(INSTALLDIR)/pppd/usr/lib/pppd/*.so
 ifeq ($(TCONFIG_L2TP),y)
 	install -D pppd/pppd/plugins/pppol2tp/pppol2tp.so $(INSTALLDIR)/pppd/usr/lib/pppd/pppol2tp.so
 	$(STRIP) $(INSTALLDIR)/pppd/usr/lib/pppd/*.so
