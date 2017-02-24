@@ -62,6 +62,11 @@ static int setdeflate __P((char **));
 static char bsd_value[8];
 static char deflate_value[8];
 
+#ifdef MPPE
+static int setmppe(char **);
+static int setnomppe(void);
+#endif /* MPPE */
+
 static option_t ccp_option_list[] = {
     { "noccp", o_bool, &ccp_protent.enabled_flag,
       "Disable CCP negotiation" },
@@ -114,74 +119,23 @@ static option_t ccp_option_list[] = {
 
 #ifdef MPPE
     { "mppc", o_bool, &ccp_wantoptions[0].mppc,
-      "request MPPC compression", 1, &ccp_allowoptions[0].mppc, OPT_PRIO },
+      "request MPPC compression", 1, &ccp_allowoptions[0].mppc },
     { "+mppc", o_bool, &ccp_wantoptions[0].mppc,
-      "request MPPC compression", 1, &ccp_allowoptions[0].mppc,
-      OPT_ALIAS | OPT_PRIO },
+      "request MPPC compression", 1, &ccp_allowoptions[0].mppc, OPT_ALIAS },
     { "nomppc", o_bool, &ccp_wantoptions[0].mppc,
       "don't allow MPPC compression", OPT_PRIOSUB | OPT_A2CLR,
       &ccp_allowoptions[0].mppc },
     { "-mppc", o_bool, &ccp_wantoptions[0].mppc,
       "don't allow MPPC compression", OPT_ALIAS | OPT_PRIOSUB | OPT_A2CLR,
       &ccp_allowoptions[0].mppc },
-
-    { "require-mppe", o_bool, &ccp_wantoptions[0].mppe,
-      "require MPPE encryption", 1, &ccp_allowoptions[0].mppe, OPT_PRIO },
-    { "+mppe", o_bool, &ccp_wantoptions[0].mppe,
-      "require MPPE encryption", 1, &ccp_allowoptions[0].mppe,
-      OPT_ALIAS | OPT_PRIO },
-    { "nomppe", o_bool, &ccp_wantoptions[0].mppe,
-      "don't allow MPPE encryption", OPT_PRIOSUB | OPT_A2CLR,
-      &ccp_allowoptions[0].mppe },
-    { "-mppe", o_bool, &ccp_wantoptions[0].mppe,
-      "don't allow MPPE encryption", OPT_ALIAS | OPT_PRIOSUB | OPT_A2CLR,
-      &ccp_allowoptions[0].mppe },
-
-    { "require-mppe-40", o_bool, &ccp_wantoptions[0].mppe_40,
-      "require MPPE 40-bit encryption", 1, &ccp_allowoptions[0].mppe_40,
-      OPT_PRIO },
-    { "+mppe-40", o_bool, &ccp_wantoptions[0].mppe_40,
-      "require MPPE 40-bit encryption", 1, &ccp_allowoptions[0].mppe_40,
-      OPT_ALIAS | OPT_PRIO },
-    { "nomppe-40", o_bool, &ccp_wantoptions[0].mppe_40,
-      "don't allow MPPE 40-bit encryption", OPT_PRIOSUB | OPT_A2CLR,
-      &ccp_allowoptions[0].mppe_40 },
-    { "-mppe-40", o_bool, &ccp_wantoptions[0].mppe_40,
-      "don't allow MPPE 40-bit encryption", OPT_ALIAS | OPT_PRIOSUB | OPT_A2CLR,
-      &ccp_allowoptions[0].mppe_40 },
-
-    { "require-mppe-56", o_bool, &ccp_wantoptions[0].mppe_56,
-      "require MPPE 56-bit encryption", 1, &ccp_allowoptions[0].mppe_56,
-      OPT_PRIO },
-    { "+mppe-56", o_bool, &ccp_wantoptions[0].mppe_56,
-      "require MPPE 56-bit encryption", 1, &ccp_allowoptions[0].mppe_56,
-      OPT_ALIAS | OPT_PRIO },
-    { "nomppe-56", o_bool, &ccp_wantoptions[0].mppe_56,
-      "don't allow MPPE 56-bit encryption", OPT_PRIOSUB | OPT_A2CLR,
-      &ccp_allowoptions[0].mppe_56 },
-    { "-mppe-56", o_bool, &ccp_wantoptions[0].mppe_56,
-      "don't allow MPPE 56-bit encryption", OPT_ALIAS | OPT_PRIOSUB | OPT_A2CLR,
-      &ccp_allowoptions[0].mppe_56 },
-
-    { "require-mppe-128", o_bool, &ccp_wantoptions[0].mppe_128,
-      "require MPPE 128-bit encryption", 1, &ccp_allowoptions[0].mppe_128,
-      OPT_PRIO },
-    { "+mppe-128", o_bool, &ccp_wantoptions[0].mppe_128,
-      "require MPPE 128-bit encryption", 1, &ccp_allowoptions[0].mppe_128,
-      OPT_ALIAS | OPT_PRIO },
-    { "nomppe-128", o_bool, &ccp_wantoptions[0].mppe_128,
-      "don't allow MPPE 128-bit encryption", OPT_PRIOSUB | OPT_A2CLR,
-      &ccp_allowoptions[0].mppe_128 },
-    { "-mppe-128", o_bool, &ccp_wantoptions[0].mppe_128,
-      "don't allow MPPE 128-bit encryption", OPT_ALIAS | OPT_PRIOSUB | OPT_A2CLR,
-      &ccp_allowoptions[0].mppe_128 },
-
-    { "nomppe-stateful", o_bool, &ccp_wantoptions[0].mppe_stateless,
-      "disallow MPPE stateful mode", 1, &ccp_allowoptions[0].mppe_stateless,
-      OPT_PRIO },
-    { "mppe-stateful", o_bool, &ccp_wantoptions[0].mppe_stateless,
-      "allow MPPE stateful mode", OPT_PRIOSUB | OPT_A2CLR,
-      &ccp_allowoptions[0].mppe_stateless },
+    { "mppe", o_special, (void *)setmppe,
+      "request MPPE encryption" },
+    { "+mppe", o_special, (void *)setmppe,
+      "request MPPE encryption" },
+    { "nomppe", o_special_noarg, (void *)setnomppe,
+      "don't allow MPPE encryption" },
+    { "-mppe", o_special_noarg, (void *)setnomppe,
+      "don't allow MPPE encryption" },
 #endif /* MPPE */
 
     { NULL }
@@ -370,6 +324,100 @@ setdeflate(argv)
     return 1;
 }
 
+#ifdef MPPE
+/*
+ * Functions called from config options
+ */
+/* 
+   MPPE suboptions:
+	required - require MPPE; disconnect if peer doesn't support it
+	stateless - use stateless mode
+	no40 - disable 40 bit keys
+	no56 - disable 56 bit keys
+	no128 - disable 128 bit keys
+*/
+int setmppe(char **argv)
+{
+    int i;
+    char *str, cmdbuf[16];
+
+    ccp_allowoptions[0].mppe = 1;
+    ccp_allowoptions[0].mppe_40 = 1;
+    ccp_allowoptions[0].mppe_56 = 1;
+    ccp_allowoptions[0].mppe_128 = 1;
+    ccp_allowoptions[0].mppe_stateless = 0;
+    ccp_wantoptions[0].mppe = 0;
+
+    str = *argv;
+
+    while (1) {
+	i = 0;
+	memset(cmdbuf, '\0', 16);
+	while ((i < 16) && (*str != ',') && (*str != '\0'))
+	    cmdbuf[i++] = *str++;
+	cmdbuf[i] = '\0';
+	if (!strncasecmp(cmdbuf, "no40", strlen("no40"))) {
+	    ccp_allowoptions[0].mppe_40 = 0;
+	    goto next_param;
+	} else if (!strncasecmp(cmdbuf, "no56", strlen("no56"))) {
+	    ccp_allowoptions[0].mppe_56 = 0;
+	    goto next_param;
+	} else if (!strncasecmp(cmdbuf, "no128", strlen("no128"))) {
+	    ccp_allowoptions[0].mppe_128 = 0;
+	    goto next_param;
+	} else if (!strncasecmp(cmdbuf, "stateless", strlen("stateless"))) {
+	    ccp_allowoptions[0].mppe_stateless = 1;
+	    goto next_param;
+	} else if (!strncasecmp(cmdbuf, "required", strlen("required"))) {
+	    ccp_wantoptions[0].mppe = 1;
+	    goto next_param;
+	} else {
+	    option_error("invalid parameter '%s' for mppe option", cmdbuf);
+	    return 0;
+	}
+
+    next_param:
+	if (*str == ',') {
+	    str++;
+	    continue;
+	}
+	if (*str == '\0') {
+	    if (!(ccp_allowoptions[0].mppe_40 || ccp_allowoptions[0].mppe_56 ||
+		  ccp_allowoptions[0].mppe_128)) {
+		if (ccp_wantoptions[0].mppe == 1) {
+		    option_error("You require MPPE but you have switched off "
+				 "all encryption key lengths.");
+		    return 0;
+		}
+		ccp_wantoptions[0].mppe = ccp_allowoptions[0].mppe = 0;
+		ccp_wantoptions[0].mppe_stateless =
+		    ccp_allowoptions[0].mppe_stateless = 0;
+	    } else {
+		ccp_allowoptions[0].mppe = 1;
+		ccp_wantoptions[0].mppe_stateless =
+		    ccp_allowoptions[0].mppe_stateless;
+		if (ccp_wantoptions[0].mppe == 1) {
+		    ccp_wantoptions[0].mppe_40 = ccp_allowoptions[0].mppe_40;
+		    ccp_wantoptions[0].mppe_56 = ccp_allowoptions[0].mppe_56;
+		    ccp_wantoptions[0].mppe_128 = ccp_allowoptions[0].mppe_128;
+		}
+	    }
+	    return 1;
+	}
+    }
+}
+
+int setnomppe(void)
+{
+    ccp_wantoptions[0].mppe = ccp_allowoptions[0].mppe = 0;
+    ccp_wantoptions[0].mppe_40 = ccp_allowoptions[0].mppe_40 = 0;
+    ccp_wantoptions[0].mppe_56 = ccp_allowoptions[0].mppe_56 = 0;
+    ccp_wantoptions[0].mppe_128 = ccp_allowoptions[0].mppe_128 = 0;
+    ccp_wantoptions[0].mppe_stateless = ccp_allowoptions[0].mppe_stateless = 0;
+    return 1;
+}
+#endif /* MPPE */
+
 /*
  * ccp_init - initialize CCP.
  */
@@ -378,8 +426,6 @@ ccp_init(unit)
     int unit;
 {
     fsm *f = &ccp_fsm[unit];
-    ccp_options *wo = &ccp_wantoptions[unit];
-    ccp_options *ao = &ccp_allowoptions[unit];
 
     f->unit = unit;
     f->protocol = PPP_CCP;
@@ -391,44 +437,44 @@ ccp_init(unit)
     memset(&ccp_allowoptions[unit], 0, sizeof(ccp_options));
     memset(&ccp_hisoptions[unit],   0, sizeof(ccp_options));
 
-    wo->deflate = 1;
-    wo->deflate_size = DEFLATE_MAX_SIZE;
-    wo->deflate_correct = 1;
-    wo->deflate_draft = 1;
-    ao->deflate = 1;
-    ao->deflate_size = DEFLATE_MAX_SIZE;
-    ao->deflate_correct = 1;
-    ao->deflate_draft = 1;
+    ccp_wantoptions[0].deflate = 1;
+    ccp_wantoptions[0].deflate_size = DEFLATE_MAX_SIZE;
+    ccp_wantoptions[0].deflate_correct = 1;
+    ccp_wantoptions[0].deflate_draft = 1;
+    ccp_allowoptions[0].deflate = 1;
+    ccp_allowoptions[0].deflate_size = DEFLATE_MAX_SIZE;
+    ccp_allowoptions[0].deflate_correct = 1;
+    ccp_allowoptions[0].deflate_draft = 1;
 
-    wo->bsd_compress = 1;
-    wo->bsd_bits = BSD_MAX_BITS;
-    ao->bsd_compress = 1;
-    ao->bsd_bits = BSD_MAX_BITS;
+    ccp_wantoptions[0].bsd_compress = 1;
+    ccp_wantoptions[0].bsd_bits = BSD_MAX_BITS;
+    ccp_allowoptions[0].bsd_compress = 1;
+    ccp_allowoptions[0].bsd_bits = BSD_MAX_BITS;
 
-    ao->predictor_1 = 1;
+    ccp_allowoptions[0].predictor_1 = 1;
 
-    wo->lzs = 0; /* Stac LZS  - will be enabled in the future */
-    wo->lzs_mode = LZS_MODE_SEQ;
-    wo->lzs_hists = 1;
-    ao->lzs = 0; /* Stac LZS  - will be enabled in the future */
-    ao->lzs_mode = LZS_MODE_SEQ;
-    ao->lzs_hists = 1;
+    ccp_wantoptions[0].lzs = 0; /* Stac LZS  - will be enabled in the future */
+    ccp_wantoptions[0].lzs_mode = LZS_MODE_SEQ;
+    ccp_wantoptions[0].lzs_hists = 1;
+    ccp_allowoptions[0].lzs = 0; /* Stac LZS  - will be enabled in the future */
+    ccp_allowoptions[0].lzs_mode = LZS_MODE_SEQ;
+    ccp_allowoptions[0].lzs_hists = 1;
 
 #ifdef MPPE
     /* by default allow and request MPPC... */
-    wo->mppc = ao->mppc = 1;
+    ccp_wantoptions[0].mppc = ccp_allowoptions[0].mppc = 1;
 
     /* ... and allow but don't request MPPE */
-    ao->mppe = 1;
-    ao->mppe_40 = 1;
-    ao->mppe_56 = 1;
-    ao->mppe_128 = 1;
-    ao->mppe_stateless = 1;
-    wo->mppe = 0;
-    wo->mppe_40 = 0;
-    wo->mppe_56 = 0;
-    wo->mppe_128 = 0;
-    wo->mppe_stateless = 0;
+    ccp_allowoptions[0].mppe = 1;
+    ccp_allowoptions[0].mppe_40 = 1;
+    ccp_allowoptions[0].mppe_56 = 1;
+    ccp_allowoptions[0].mppe_128 = 1;
+    ccp_allowoptions[0].mppe_stateless = 1;
+    ccp_wantoptions[0].mppe = 0;
+    ccp_wantoptions[0].mppe_40 = 0;
+    ccp_wantoptions[0].mppe_56 = 0;
+    ccp_wantoptions[0].mppe_128 = 0;
+    ccp_wantoptions[0].mppe_stateless = 0;
 #endif /* MPPE */
 }
 
@@ -1024,7 +1070,7 @@ ccp_ackci(f, p, len)
 
 /*
  * ccp_nakci - process received configure-nak.
- * Returns 1 if the nak was OK.
+ * Returns 1 iff the nak was OK.
  */
 static int
 ccp_nakci(f, p, len, treat_as_reject)
@@ -1094,9 +1140,8 @@ ccp_nakci(f, p, len, treat_as_reject)
 	    if (wo->mppe) {
 		/* we require encryption, but peer doesn't support it
 		   so we close connection */
-		//wo->mppc = wo->mppe = wo->mppe_stateless = wo->mppe_40 =
-		//    wo->mppe_56 = wo->mppe_128 = 0;
-		error("MPPE required but cannot negotiate MPPE key length");
+		wo->mppc = wo->mppe = wo->mppe_stateless = wo->mppe_40 =
+		    wo->mppe_56 = wo->mppe_128 = 0;
 		lcp_close(f->unit, "MPPE required but cannot negotiate MPPE "
 			  "key length");
 	    }
@@ -1104,9 +1149,8 @@ ccp_nakci(f, p, len, treat_as_reject)
 	if (wo->mppe && (wo->mppe_40 != try.mppe_40) &&
 	    (wo->mppe_56 != try.mppe_56) && (wo->mppe_128 != try.mppe_128)) {
 	    /* cannot negotiate key length */
-	    //wo->mppc = wo->mppe = wo->mppe_stateless = wo->mppe_40 =
-	    //	wo->mppe_56 = wo->mppe_128 = 0;
-	    error("Cannot negotiate MPPE key length");
+	    wo->mppc = wo->mppe = wo->mppe_stateless = wo->mppe_40 =
+		wo->mppe_56 = wo->mppe_128 = 0;
 	    lcp_close(f->unit, "Cannot negotiate MPPE key length");
 	}
 	if (try.mppe_40 && try.mppe_56 && try.mppe_128)
@@ -1237,9 +1281,8 @@ ccp_rejci(f, p, len)
 	    if (!try.mppe_56 && !try.mppe_40 && !try.mppe_128)
 		try.mppe = try.mppe_stateless = 0;
 	    if (wo->mppe) { /* we want MPPE but cannot negotiate key length */
-		//wo->mppc = wo->mppe = wo->mppe_stateless = wo->mppe_40 =
-		//    wo->mppe_56 = wo->mppe_128 = 0;
-		error("MPPE required but cannot negotiate MPPE key length");
+		wo->mppc = wo->mppe = wo->mppe_stateless = wo->mppe_40 =
+		    wo->mppe_56 = wo->mppe_128 = 0;
 		lcp_close(f->unit, "MPPE required but cannot negotiate MPPE "
 			  "key length");
 	    }
@@ -1350,299 +1393,302 @@ ccp_reqci(f, p, lenp, dont_nak)
 	    switch (type) {
 #ifdef MPPE
 	    case CI_MPPE:
-		if ((!ao->mppc && !ao->mppe) || clen != CILEN_MPPE) {
+ 		if ((!ao->mppc && !ao->mppe) || clen != CILEN_MPPE) {
 		    newret = CONFREJ;
 		    break;
 		}
-		p2 = p[2];
-		p5 = p[5];
-		/* not sure what they want, tell 'em what we got */
-		if (((p[2] & ~MPPE_STATELESS) != 0 || p[3] != 0 || p[4] != 0 ||
-		     (p[5] & ~(MPPE_40BIT | MPPE_56BIT | MPPE_128BIT |
-			       MPPE_MPPC)) != 0 || p[5] == 0) ||
-		    (p[2] == 0 && p[3] == 0 && p[4] == 0 &&  p[5] == 0)) {
+ 		p2 = p[2];
+ 		p5 = p[5];
+ 		/* not sure what they want, tell 'em what we got */
+ 		if (((p[2] & ~MPPE_STATELESS) != 0 || p[3] != 0 || p[4] != 0 ||
+ 		     (p[5] & ~(MPPE_40BIT | MPPE_56BIT | MPPE_128BIT |
+ 			       MPPE_MPPC)) != 0 || p[5] == 0) ||
+ 		    (p[2] == 0 && p[3] == 0 && p[4] == 0 &&  p[5] == 0)) {
 		    newret = CONFNAK;
-		}
+ 		    p[2] = (wo->mppe_stateless ? MPPE_STATELESS : 0);
+		    p[3] = 0;
+ 		    p[4] = 0;
+ 		    p[5] = (wo->mppe_40 ? MPPE_40BIT : 0) |
+ 			(wo->mppe_56 ? MPPE_56BIT : 0) |
+ 			(wo->mppe_128 ? MPPE_128BIT : 0) |
+ 			(wo->mppc ? MPPE_MPPC : 0);
+ 		    break;
+  		}
 
-		if ((p[5] & MPPE_MPPC)) {
-		    if (ao->mppc) {
-			ho->mppc = 1;
-			BCOPY(p, opt_buf, CILEN_MPPE);
-			opt_buf[2] = opt_buf[3] = opt_buf[4] = 0;
-			opt_buf[5] = MPPE_MPPC;
-			if (ccp_test(f->unit, opt_buf, CILEN_MPPE, 1) <= 0) {
-			    ho->mppc = 0;
-			    p[5] &= ~MPPE_MPPC;
-			    newret = CONFNAK;
-			}
-		    } else {
-			newret = CONFREJ;
-			if (wo->mppe || ao->mppe) {
-			    p[5] &= ~MPPE_MPPC;
-			    newret = CONFNAK;
-			}
+ 		if ((p[5] & MPPE_MPPC)) {
+ 		    if (ao->mppc) {
+ 			ho->mppc = 1;
+ 			BCOPY(p, opt_buf, CILEN_MPPE);
+ 			opt_buf[2] = opt_buf[3] = opt_buf[4] = 0;
+ 			opt_buf[5] = MPPE_MPPC;
+ 			if (ccp_test(f->unit, opt_buf, CILEN_MPPE, 1) <= 0) {
+ 			    ho->mppc = 0;
+ 			    p[5] &= ~MPPE_MPPC;
+ 			    newret = CONFNAK;
+ 			}
+ 		    } else {
+		      newret = CONFREJ;
+ 			if (wo->mppe || ao->mppe) {
+ 			    p[5] &= ~MPPE_MPPC;
+ 			    newret = CONFNAK;
+ 			}
 		    }
 		}
-
-		if (ao->mppe)
-		    ho->mppe = 1;
-
-		if ((p[2] & MPPE_STATELESS)) {
-		    if (ao->mppe_stateless) {
-			if (wo->mppe_stateless)
-			    ho->mppe_stateless = 1;
-			else {
-			    newret = CONFNAK;
-			    if (!dont_nak)
-				p[2] &= ~MPPE_STATELESS;
-			}
-		    } else {
-			newret = CONFNAK;
-			if (!dont_nak)
-			    p[2] &= ~MPPE_STATELESS;
-		    }
-		} else {
-		    if (wo->mppe_stateless && !dont_nak) {
-			//wo->mppe_stateless = 0;
-			newret = CONFNAK;
-			p[2] |= MPPE_STATELESS;
-		    }
-		}
-
-		if ((p[5] & ~MPPE_MPPC) == (MPPE_40BIT|MPPE_56BIT|MPPE_128BIT)) {
-		    newret = CONFNAK;
-		    if (ao->mppe_128) {
-			ho->mppe_128 = 1;
-			p[5] &= ~(MPPE_40BIT|MPPE_56BIT);
-			BCOPY(p, opt_buf, CILEN_MPPE);
+ 		if (ao->mppe)
+ 		    ho->mppe = 1;
+ 
+ 		if ((p[2] & MPPE_STATELESS)) {
+ 		    if (ao->mppe_stateless) {
+ 			if (wo->mppe_stateless)
+ 			    ho->mppe_stateless = 1;
+ 			else {
+ 			    newret = CONFNAK;
+ 			    if (!dont_nak)
+ 				p[2] &= ~MPPE_STATELESS;
+ 			}
+ 		    } else {
+ 			newret = CONFNAK;
+ 			if (!dont_nak)
+ 			    p[2] &= ~MPPE_STATELESS;
+ 		    }
+ 		} else {
+ 		    if (wo->mppe_stateless && !dont_nak) {
+ 			wo->mppe_stateless = 0;
+ 			newret = CONFNAK;
+ 			p[2] |= MPPE_STATELESS;
+  		    }
+  		}
+  
+ 		if ((p[5] & ~MPPE_MPPC) == (MPPE_40BIT|MPPE_56BIT|MPPE_128BIT)) {
+  		    newret = CONFNAK;
+ 		    if (ao->mppe_128) {
+ 			ho->mppe_128 = 1;
+ 			p[5] &= ~(MPPE_40BIT|MPPE_56BIT);
+ 			BCOPY(p, opt_buf, CILEN_MPPE);
+ 			BCOPY(mppe_send_key, &opt_buf[CILEN_MPPE],
+ 			      MPPE_MAX_KEY_LEN);
+ 			if (ccp_test(f->unit, opt_buf, CILEN_MPPE +
+ 				     MPPE_MAX_KEY_LEN, 1) <= 0) {
+ 			    ho->mppe_128 = 0;
+ 			    p[5] |= (MPPE_40BIT|MPPE_56BIT);
+ 			    p[5] &= ~MPPE_128BIT;
+ 			    goto check_mppe_56_40;
+ 			}
+ 			goto check_mppe;
+  		    }
+ 		    p[5] &= ~MPPE_128BIT;
+ 		    goto check_mppe_56_40;
+ 		}
+ 		if ((p[5] & ~MPPE_MPPC) == (MPPE_56BIT|MPPE_128BIT)) {
+ 		    newret = CONFNAK;
+ 		    if (ao->mppe_128) {
+ 			ho->mppe_128 = 1;
+ 			p[5] &= ~MPPE_56BIT;
+ 			BCOPY(p, opt_buf, CILEN_MPPE);
 			BCOPY(mppe_send_key, &opt_buf[CILEN_MPPE],
-			      MPPE_MAX_KEY_LEN);
-			if (ccp_test(f->unit, opt_buf, CILEN_MPPE +
-				     MPPE_MAX_KEY_LEN, 1) <= 0) {
-			    ho->mppe_128 = 0;
-			    p[5] |= (MPPE_40BIT|MPPE_56BIT);
-			    p[5] &= ~MPPE_128BIT;
-			    goto check_mppe_56_40;
-			}
-			goto check_mppe;
-		    }
+ 			      MPPE_MAX_KEY_LEN);
+ 			if (ccp_test(f->unit, opt_buf, CILEN_MPPE +
+ 				     MPPE_MAX_KEY_LEN, 1) <= 0) {
+ 			    ho->mppe_128 = 0;
+ 			    p[5] |= MPPE_56BIT;
+ 			    p[5] &= ~MPPE_128BIT;
+ 			    goto check_mppe_56;
+ 			}
+ 			goto check_mppe;
+  		    }
+ 		    p[5] &= ~MPPE_128BIT;
+ 		    goto check_mppe_56;
+ 		}
+ 		if ((p[5] & ~MPPE_MPPC) == (MPPE_40BIT|MPPE_128BIT)) {
+ 		    newret = CONFNAK;
+ 		    if (ao->mppe_128) {
+ 			ho->mppe_128 = 1;
+ 			p[5] &= ~MPPE_40BIT;
+ 			BCOPY(p, opt_buf, CILEN_MPPE);
+ 			BCOPY(mppe_send_key, &opt_buf[CILEN_MPPE],
+ 			      MPPE_MAX_KEY_LEN);
+ 			if (ccp_test(f->unit, opt_buf, CILEN_MPPE +
+ 				     MPPE_MAX_KEY_LEN, 1) <= 0) {
+ 			    ho->mppe_128 = 0;
+ 			    p[5] |= MPPE_40BIT;
+ 			    p[5] &= ~MPPE_128BIT;
+ 			    goto check_mppe_40;
+ 			}
+ 			goto check_mppe;
+ 		    }
+ 		    p[5] &= ~MPPE_128BIT;
+ 		    goto check_mppe_40;
+ 		}
+ 		if ((p[5] & ~MPPE_MPPC) == MPPE_128BIT) {
+ 		    if (ao->mppe_128) {
+ 			ho->mppe_128 = 1;
+ 			BCOPY(p, opt_buf, CILEN_MPPE);
+ 			BCOPY(mppe_send_key, &opt_buf[CILEN_MPPE],
+ 			      MPPE_MAX_KEY_LEN);
+ 			if (ccp_test(f->unit, opt_buf, CILEN_MPPE +
+ 				     MPPE_MAX_KEY_LEN, 1) <= 0) {
+ 			    ho->mppe_128 = 0;
+ 			    p[5] &= ~MPPE_128BIT;
+ 			    newret = CONFNAK;
+ 			}
+ 			goto check_mppe;
+ 		    }
 		    p[5] &= ~MPPE_128BIT;
-		    goto check_mppe_56_40;
-		}
-		if ((p[5] & ~MPPE_MPPC) == (MPPE_56BIT|MPPE_128BIT)) {
-		    newret = CONFNAK;
-		    if (ao->mppe_128) {
-			ho->mppe_128 = 1;
-			p[5] &= ~MPPE_56BIT;
-			BCOPY(p, opt_buf, CILEN_MPPE);
-			BCOPY(mppe_send_key, &opt_buf[CILEN_MPPE],
-			      MPPE_MAX_KEY_LEN);
-			if (ccp_test(f->unit, opt_buf, CILEN_MPPE +
-				     MPPE_MAX_KEY_LEN, 1) <= 0) {
-			    ho->mppe_128 = 0;
-			    p[5] |= MPPE_56BIT;
-			    p[5] &= ~MPPE_128BIT;
-			    goto check_mppe_56;
-			}
-			goto check_mppe;
-		    }
-		    p[5] &= ~MPPE_128BIT;
-		    goto check_mppe_56;
-		}
-		if ((p[5] & ~MPPE_MPPC) == (MPPE_40BIT|MPPE_128BIT)) {
-		    newret = CONFNAK;
-		    if (ao->mppe_128) {
-			ho->mppe_128 = 1;
-			p[5] &= ~MPPE_40BIT;
-			BCOPY(p, opt_buf, CILEN_MPPE);
-			BCOPY(mppe_send_key, &opt_buf[CILEN_MPPE],
-			      MPPE_MAX_KEY_LEN);
-			if (ccp_test(f->unit, opt_buf, CILEN_MPPE +
-				     MPPE_MAX_KEY_LEN, 1) <= 0) {
-			    ho->mppe_128 = 0;
-			    p[5] |= MPPE_40BIT;
-			    p[5] &= ~MPPE_128BIT;
-			    goto check_mppe_40;
-			}
-			goto check_mppe;
-		    }
-		    p[5] &= ~MPPE_128BIT;
-		    goto check_mppe_40;
-		}
-		if ((p[5] & ~MPPE_MPPC) == MPPE_128BIT) {
-		    if (ao->mppe_128) {
-			ho->mppe_128 = 1;
-			BCOPY(p, opt_buf, CILEN_MPPE);
-			BCOPY(mppe_send_key, &opt_buf[CILEN_MPPE],
-			      MPPE_MAX_KEY_LEN);
-			if (ccp_test(f->unit, opt_buf, CILEN_MPPE +
-				     MPPE_MAX_KEY_LEN, 1) <= 0) {
-			    ho->mppe_128 = 0;
-			    p[5] &= ~MPPE_128BIT;
-			    newret = CONFNAK;
-			}
-			goto check_mppe;
-		    }
-		    p[5] &= ~MPPE_128BIT;
-		    newret = CONFNAK;
-		    goto check_mppe;
-		}
-	    check_mppe_56_40:
+ 		    newret = CONFNAK;
+ 		    goto check_mppe;
+ 		}
+ 	    check_mppe_56_40:
 		if ((p[5] & ~MPPE_MPPC) == (MPPE_40BIT|MPPE_56BIT)) {
-		    newret = CONFNAK;
-		    if (ao->mppe_56) {
-			ho->mppe_56 = 1;
-			p[5] &= ~MPPE_40BIT;
+ 		    newret = CONFNAK;
+ 		    if (ao->mppe_56) {
+ 			ho->mppe_56 = 1;
+ 			p[5] &= ~MPPE_40BIT;
 			BCOPY(p, opt_buf, CILEN_MPPE);
-			BCOPY(mppe_send_key, &opt_buf[CILEN_MPPE],
-			      MPPE_MAX_KEY_LEN);
-			if (ccp_test(f->unit, opt_buf, CILEN_MPPE +
+ 			BCOPY(mppe_send_key, &opt_buf[CILEN_MPPE],
+ 			      MPPE_MAX_KEY_LEN);
+ 			if (ccp_test(f->unit, opt_buf, CILEN_MPPE +
 				     MPPE_MAX_KEY_LEN, 1) <= 0) {
-			    ho->mppe_56 = 0;
-			    p[5] |= MPPE_40BIT;
-			    p[5] &= ~MPPE_56BIT;
+ 			    ho->mppe_56 = 0;
+ 			    p[5] |= MPPE_40BIT;
+ 			    p[5] &= ~MPPE_56BIT;
 			    newret = CONFNAK;
-			    goto check_mppe_40;
-			}
+ 			    goto check_mppe_40;
+ 			}
 			goto check_mppe;
-		    }
+ 		    }
 		    p[5] &= ~MPPE_56BIT;
-		    goto check_mppe_40;
-		}
-	    check_mppe_56:
+ 		    goto check_mppe_40;
+ 		}
+ 	    check_mppe_56:
 		if ((p[5] & ~MPPE_MPPC) == MPPE_56BIT) {
-		    if (ao->mppe_56) {
-			ho->mppe_56 = 1;
-			BCOPY(p, opt_buf, CILEN_MPPE);
-			BCOPY(mppe_send_key, &opt_buf[CILEN_MPPE],
+ 		    if (ao->mppe_56) {
+ 			ho->mppe_56 = 1;
+ 			BCOPY(p, opt_buf, CILEN_MPPE);
+ 			BCOPY(mppe_send_key, &opt_buf[CILEN_MPPE],
 			      MPPE_MAX_KEY_LEN);
-			if (ccp_test(f->unit, opt_buf, CILEN_MPPE +
-				     MPPE_MAX_KEY_LEN, 1) <= 0) {
-			    ho->mppe_56 = 0;
-			    p[5] &= ~MPPE_56BIT;
+ 			if (ccp_test(f->unit, opt_buf, CILEN_MPPE +
+ 				     MPPE_MAX_KEY_LEN, 1) <= 0) {
+ 			    ho->mppe_56 = 0;
+ 			    p[5] &= ~MPPE_56BIT;
 			    newret = CONFNAK;
-			}
+ 			}
 			goto check_mppe;
-		    }
-		    p[5] &= ~MPPE_56BIT;
-		    newret = CONFNAK;
+ 		    }
+ 		    p[5] &= ~MPPE_56BIT;
+ 		    newret = CONFNAK;
 		    goto check_mppe;
-		}
-	    check_mppe_40:
+ 		}
+ 	    check_mppe_40:
 		if ((p[5] & ~MPPE_MPPC) == MPPE_40BIT) {
-		    if (ao->mppe_40) {
-			ho->mppe_40 = 1;
-			BCOPY(p, opt_buf, CILEN_MPPE);
+ 		    if (ao->mppe_40) {
+ 			ho->mppe_40 = 1;
+ 			BCOPY(p, opt_buf, CILEN_MPPE);
 			BCOPY(mppe_send_key, &opt_buf[CILEN_MPPE],
-			      MPPE_MAX_KEY_LEN);
-			if (ccp_test(f->unit, opt_buf, CILEN_MPPE +
-				     MPPE_MAX_KEY_LEN, 1) <= 0) {
-			    ho->mppe_40 = 0;
+ 			      MPPE_MAX_KEY_LEN);
+ 			if (ccp_test(f->unit, opt_buf, CILEN_MPPE +
+ 				     MPPE_MAX_KEY_LEN, 1) <= 0) {
+ 			    ho->mppe_40 = 0;
 			    p[5] &= ~MPPE_40BIT;
-			    newret = CONFNAK;
-			}
-			goto check_mppe;
-		    }
-		    p[5] &= ~MPPE_40BIT;
-		}
-
-	    check_mppe:
-		if (!ho->mppe_40 && !ho->mppe_56 && !ho->mppe_128) {
-		    if (wo->mppe_40 || wo->mppe_56 || wo->mppe_128) {
-			newret = CONFNAK;
-			p[2] |= (wo->mppe_stateless ? MPPE_STATELESS : 0);
+ 			    newret = CONFNAK;
+ 			}
+ 			goto check_mppe;
+ 		    }
+ 		    p[5] &= ~MPPE_40BIT;
+ 		}
+ 
+ 	    check_mppe:
+ 		if (!ho->mppe_40 && !ho->mppe_56 && !ho->mppe_128) {
+ 		    if (wo->mppe_40 || wo->mppe_56 || wo->mppe_128) {
+ 			newret = CONFNAK;
+ 			p[2] |= (wo->mppe_stateless ? MPPE_STATELESS : 0);
 			p[5] |= (wo->mppe_40 ? MPPE_40BIT : 0) |
-			    (wo->mppe_56 ? MPPE_56BIT : 0) |
-			    (wo->mppe_128 ? MPPE_128BIT : 0) |
-			    (wo->mppc ? MPPE_MPPC : 0);
-		    } else {
-			ho->mppe = ho->mppe_stateless = 0;
-		    }
+ 			    (wo->mppe_56 ? MPPE_56BIT : 0) |
+ 			    (wo->mppe_128 ? MPPE_128BIT : 0) |
+ 			    (wo->mppc ? MPPE_MPPC : 0);
+ 		    } else {
+ 			ho->mppe = ho->mppe_stateless = 0;
+ 		    }
 		} else {
-		    /* MPPE is not compatible with other compression types */
-		    if (wo->mppe) {
-			ao->bsd_compress = 0;
-			ao->predictor_1 = 0;
-			ao->predictor_2 = 0;
+ 		    /* MPPE is not compatible with other compression types */
+ 		    if (wo->mppe) {
+ 			ao->bsd_compress = 0;
+ 			ao->predictor_1 = 0;
+ 			ao->predictor_2 = 0;
 			ao->deflate = 0;
-			ao->lzs = 0;
-		    }
-		}
-		if ((!ho->mppc || !ao->mppc) && !ho->mppe) {
-		    p[2] = p2;
-		    p[5] = p5;
-		    /* We cannot accept this.  */
-		    newret = CONFREJ;
-		    /* Give the peer our idea of what can be used,
-		       so it can choose and confirm */
-		    ho->mppe = ao->mppe;
-		}
-
-		/*
-		 * I have commented the code below because according to RFC1547
-		 * MTU is only information for higher level protocols about
-		 * "the maximum allowable length for a packet (q.v.) transmitted
-		 * over a point-to-point link without incurring network layer
-		 * fragmentation." Of course a PPP implementation should be able
-		 * to handle overhead added by MPPE - in our case apropriate code
-		 * is located in drivers/net/ppp_generic.c in the kernel sources.
+ 			ao->lzs = 0;
+ 		    }
+ 		}
+ 		if ((!ho->mppc || !ao->mppc) && !ho->mppe) {
+ 		    p[2] = p2;
+ 		    p[5] = p5;
+  		    newret = CONFREJ;
+  		    break;
+  		}
+  
+ 		/*
+ 		 * I have commented the code below because according to RFC1547
+ 		 * MTU is only information for higher level protocols about
+ 		 * "the maximum allowable length for a packet (q.v.) transmitted
+ 		 * over a point-to-point link without incurring network layer
+ 		 * fragmentation." Of course a PPP implementation should be able
+ 		 * to handle overhead added by MPPE - in our case apropriate code
+ 		 * is located in drivers/net/ppp_generic.c in the kernel sources.
 		 *
-		 * According to RFC1661:
-		 * - when negotiated MRU is less than 1500 octets, a PPP
-		 *   implementation must still be able to receive at least 1500
-		 *   octets,
-		 * - when PFC is negotiated, a PPP implementation is still
-		 *   required to receive frames with uncompressed protocol field.
+ 		 * According to RFC1661:
+ 		 * - when negotiated MRU is less than 1500 octets, a PPP
+ 		 *   implementation must still be able to receive at least 1500
+ 		 *   octets,
+ 		 * - when PFC is negotiated, a PPP implementation is still
+ 		 *   required to receive frames with uncompressed protocol field.
 		 *
-		 * So why not to handle MPPE overhead without changing MTU value?
-		 * I am sure that RFC3078, unfortunately silently, assumes that.
-		 */
-
-		/*
-		 * We need to decrease the interface MTU by MPPE_PAD
-		 * because MPPE frames **grow**.  The kernel [must]
-		 * allocate MPPE_PAD extra bytes in xmit buffers.
-		 */
-/*
-		mtu = netif_get_mtu(f->unit);
-		if (mtu) {
-		    netif_set_mtu(f->unit, mtu - MPPE_PAD);
-		} else {
+ 		 * So why not to handle MPPE overhead without changing MTU value?
+ 		 * I am sure that RFC3078, unfortunately silently, assumes that.
+ 		 */
+ 
+ 		/*
+ 		 * We need to decrease the interface MTU by MPPE_PAD
+ 		 * because MPPE frames **grow**.  The kernel [must]
+ 		 * allocate MPPE_PAD extra bytes in xmit buffers.
+ 		 */
+ /*
+ 		mtu = netif_get_mtu(f->unit);
+ 		if (mtu) {
+ 		    netif_set_mtu(f->unit, mtu - MPPE_PAD);
+ 		} else {
 		    newret = CONFREJ;
-		    if (ccp_wantoptions[f->unit].mppe) {
-			error("Cannot adjust MTU needed by MPPE.");
-			lcp_close(f->unit, "Cannot adjust MTU needed by MPPE.");
-		    }
-		}
-*/
-		break;
-#endif /* MPPE */
-
+ 		    if (ccp_wantoptions[f->unit].mppe) {
+ 			error("Cannot adjust MTU needed by MPPE.");
+ 			lcp_close(f->unit, "Cannot adjust MTU needed by MPPE.");
+ 		    }
+ 		}
+ */
+ 		break;
+  #endif /* MPPE */
+ 
 	    case CI_LZS:
-		if (!ao->lzs || clen != CILEN_LZS) {
-		    newret = CONFREJ;
-		    break;
-		}
-
-		ho->lzs = 1;
+ 		if (!ao->lzs || clen != CILEN_LZS) {
+ 		    newret = CONFREJ;
+ 		    break;
+ 		}
+ 
+ 		ho->lzs = 1;
 		ho->lzs_hists = (p[2] << 8) | p[3];
-		ho->lzs_mode = p[4];
-		if ((ho->lzs_hists != ao->lzs_hists) ||
+ 		ho->lzs_mode = p[4];
+	if ((ho->lzs_hists != ao->lzs_hists) ||
 		    (ho->lzs_mode != ao->lzs_mode)) {
-		    newret = CONFNAK;
-		    if (!dont_nak) {
-			p[2] = ao->lzs_hists >> 8;
-			p[3] = ao->lzs_hists & 0xff;
-			p[4] = ao->lzs_mode;
-		    } else
-			break;
-		}
-
-		if (p == p0 && ccp_test(f->unit, p, CILEN_LZS, 1) <= 0) {
-		    newret = CONFREJ;
-		}
-		break;
-
+ 		    newret = CONFNAK;
+ 		    if (!dont_nak) {
+ 			p[2] = ao->lzs_hists >> 8;
+ 			p[3] = ao->lzs_hists & 0xff;
+ 			p[4] = ao->lzs_mode;
+	    } else
+ 			break;
+ 		}
+ 
+ 		if (p == p0 && ccp_test(f->unit, p, CILEN_LZS, 1) <= 0) {
+ 		    newret = CONFREJ;
+ 		}
+ 		break;
 	    case CI_DEFLATE:
 	    case CI_DEFLATE_DRAFT:
 		if (!ao->deflate || clen != CILEN_DEFLATE

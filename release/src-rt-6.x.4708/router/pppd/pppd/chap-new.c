@@ -82,6 +82,7 @@ static struct chap_client_state {
 	int flags;
 	char *name;
 	struct chap_digest_type *digest;
+	unsigned char priv[64];		/* private area for digest's use */
 } client;
 
 /*
@@ -477,7 +478,7 @@ chap_respond(struct chap_client_state *cs, int id,
 	p += CHAP_HDRLEN;
 
 	cs->digest->make_response(p, id, cs->name, pkt,
-				  secret, secret_len);
+				  secret, secret_len, cs->priv);
 	memset(secret, 0, secret_len);
 
 	clen = *p;

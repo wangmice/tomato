@@ -57,6 +57,7 @@
 
 #ifdef PPP_FILTER
 #include <pcap.h>
+#include <pcap-bpf.h>
 /*
  * There have been 3 or 4 different names for this in libpcap CVS, but
  * this seems to be what they have settled on...
@@ -78,7 +79,6 @@
 #if defined(ultrix) || defined(NeXT)
 char *strdup __P((char *));
 #endif
-bool tx_only;			/* JYWeng 20031216: idle time counting on tx traffic */
 
 static const char rcsid[] = RCSID;
 
@@ -91,7 +91,6 @@ struct option_value {
 /*
  * Option variables and default values.
  */
-bool	nochecktime = 0;	/* Don't check time */
 int	debug = 0;		/* Debug flag */
 int	kdebugflag = 0;		/* Tell kernel to print debug messages */
 int	default_device = 1;	/* Using /dev/tty or equivalent */
@@ -106,7 +105,6 @@ bool	persist = 0;		/* Reopen link after it goes down */
 char	our_name[MAXNAMELEN];	/* Our name for authentication purposes */
 bool	demand = 0;		/* do dial-on-demand */
 char	*ipparam = NULL;	/* Extra parameter for ip up/down scripts */
-
 int	idle_time_limit = 0;	/* Disconnect if idle for this many seconds */
 int	holdoff = 30;		/* # seconds to pause before reconnecting */
 bool	holdoff_specified;	/* true if a holdoff value has been given */
@@ -114,11 +112,14 @@ int	log_to_fd = 1;		/* send log messages to this fd too */
 bool	log_default = 1;	/* log_to_fd is default (stdout) */
 int	maxfail = 10;		/* max # of unsuccessful connection attempts */
 char	linkname[MAXPATHLEN];	/* logical name for link */
+char	use_ifname[IFNAMSIZ];	/* physical name for PPP link */
 bool	tune_kernel;		/* may alter kernel settings */
 int	connect_delay = 1000;	/* wait this many ms after connect script */
 int	req_unit = -1;		/* requested interface unit */
-int	req_minunit = -1;	/* requested minimal interface unit */
-char	req_ifname[32];		/* requested interface name */
+char	path_ipup[MAXPATHLEN];	/* pathname of ip-up script */
+char	path_ipdown[MAXPATHLEN];/* pathname of ip-down script */
+char	path_ipv6up[MAXPATHLEN];	/* pathname of ipv6-up script */
+char	path_ipv6down[MAXPATHLEN];/* pathname of ipv6-down script */
 bool	multilink = 0;		/* Enable multilink operation */
 char	*bundle_name = NULL;	/* bundle name for multilink */
 bool	dump_options;		/* print out option values */
@@ -166,6 +167,13 @@ static int setlogfile __P((char **));
 static int loadplugin __P((char **));
 #endif
 
+#ifdef PPP_PRECOMPILED_FILTER
+#include "pcap_pcc.h"
+static int setprecompiledpassfilter __P((char **));
+static int setprecompiledactivefilter __P((char **));
+#undef PPP_FILTER
+#endif
+
 #ifdef PPP_FILTER
 static int setpassfilter __P((char **));
 static int setactivefilter __P((char **));
@@ -199,8 +207,6 @@ static struct option_list *extra_options = NULL;
  * Valid arguments.
  */
 option_t general_options[] = {
-    { "nochecktime", o_bool, &nochecktime,
-      "Don't check time", OPT_PRIO | 1 },
     { "debug", o_int, &debug,
       "Increase debugging level", OPT_INC | OPT_NOARG | 1 },
     { "-d", o_int, &debug,
@@ -272,6 +278,9 @@ option_t general_options[] = {
     { "linkname", o_string, linkname,
       "Set logical name for link",
       OPT_PRIO | OPT_PRIV | OPT_STATIC, NULL, MAXPATHLEN },
+    { "ifname", o_string, use_ifname,
+      "Set physical name for PPP interface",
+      OPT_PRIO | OPT_PRIV | OPT_STATIC, NULL, IFNAMSIZ },
 
     { "maxfail", o_int, &maxfail,
       "Maximum number of unsuccessful connection attempts to allow",
@@ -289,13 +298,6 @@ option_t general_options[] = {
     { "unit", o_int, &req_unit,
       "PPP interface unit number to use if possible",
       OPT_PRIO | OPT_LLIMIT, 0, 0 },
-    { "minunit", o_int, &req_minunit,
-      "PPP interface minimal unit number",
-      OPT_PRIO | OPT_LLIMIT, 0, 0 },
-
-    { "ifname", o_string, req_ifname,
-      "PPP interface name to use if possible",
-      OPT_PRIO | OPT_PRIV | OPT_STATIC, NULL, sizeof(req_ifname) },
 
     { "dump", o_bool, &dump_options,
       "Print out option values after parsing all options", 1 },
@@ -313,6 +315,20 @@ option_t general_options[] = {
       "Unset user environment variable",
       OPT_A2PRINTER | OPT_NOPRINT, (void *)user_unsetprint },
 
+    { "ip-up-script", o_string, path_ipup,
+      "Set pathname of ip-up script",
+      OPT_PRIV|OPT_STATIC, NULL, MAXPATHLEN },
+    { "ip-down-script", o_string, path_ipdown,
+      "Set pathname of ip-down script",
+      OPT_PRIV|OPT_STATIC, NULL, MAXPATHLEN },
+
+    { "ipv6-up-script", o_string, path_ipv6up,
+      "Set pathname of ipv6-up script",
+      OPT_PRIV|OPT_STATIC, NULL, MAXPATHLEN },
+    { "ipv6-down-script", o_string, path_ipv6down,
+      "Set pathname of ipv6-down script",
+      OPT_PRIV|OPT_STATIC, NULL, MAXPATHLEN },
+
 #ifdef HAVE_MULTILINK
     { "multilink", o_bool, &multilink,
       "Enable multilink operation", OPT_PRIO | 1 },
@@ -320,12 +336,13 @@ option_t general_options[] = {
       "Enable multilink operation", OPT_PRIOSUB | OPT_ALIAS | 1 },
     { "nomultilink", o_bool, &multilink,
       "Disable multilink operation", OPT_PRIOSUB | 0 },
-    { "nomp", o_bool, &multilink,
-      "Disable multilink operation", OPT_PRIOSUB | OPT_ALIAS | 0 },
 
     { "bundle", o_string, &bundle_name,
       "Bundle name for multilink", OPT_PRIO },
 #endif /* HAVE_MULTILINK */
+
+    { "nomp", o_bool, &multilink,
+      "Disable multilink operation", OPT_PRIOSUB | OPT_ALIAS | 0 },
 
 #ifdef PLUGIN
     { "plugin", o_special, (void *)loadplugin,
@@ -340,6 +357,14 @@ option_t general_options[] = {
       "set filter for active pkts", OPT_PRIO },
 #endif
 
+#ifdef PPP_PRECOMPILED_FILTER
+    { "precompiled-pass-filter", 1, setprecompiledpassfilter,
+      "set precompiled filter for packets to pass", OPT_PRIO },
+
+    { "precompiled-active-filter", 1, setprecompiledactivefilter,
+      "set precompiled filter for active pkts", OPT_PRIO },
+#endif
+
 #ifdef MAXOCTETS
     { "maxoctets", o_int, &maxoctets,
       "Set connection traffic limit",
@@ -352,10 +377,6 @@ option_t general_options[] = {
     { "mo-timeout", o_int, &maxoctets_timeout,
       "Check for traffic limit every N seconds", OPT_PRIO | OPT_LLIMIT | 1 },
 #endif
-
-/* JYWeng 20031216: add for tx_only option*/
-    { "tx_only", o_bool, &tx_only,
-      "set idle time counting on tx_only or not", 1 },
 
     { NULL }
 };
@@ -406,7 +427,6 @@ parse_args(argc, argv)
 	    usage();
 	    return 0;
 	}
-
 	n = n_arguments(opt);
 	if (argc < n) {
 	    option_error("too few parameters for option %s", arg);
@@ -799,7 +819,7 @@ process_option(opt, cmd, argv)
 	    sv = strdup(*argv);
 	    if (sv == NULL)
 		novm("option argument");
-	    if (*optptr && opt->source)
+	    if (*optptr)
 		free(*optptr);
 	    *optptr = sv;
 	}
@@ -993,7 +1013,7 @@ print_option(opt, mainopt, printer, arg)
 			p = (char *) opt->addr2;
 			if ((opt->flags & OPT_STATIC) == 0)
 				p = *(char **)p;
-			printer("%q", p);
+			printer(arg, "%q", p);
 		} else if (opt->flags & OPT_A2LIST) {
 			struct option_value *ovp;
 
@@ -1493,6 +1513,29 @@ callfile(argv)
     free(fname);
     return ok;
 }
+
+#ifdef PPP_PRECOMPILED_FILTER
+/*
+ * setprecompiledpassfilter - Set the pass filter for packets using a
+ * precompiled expression
+ */
+static int
+setprecompiledpassfilter(argv)
+    char **argv;
+{
+    return pcap_pre_compiled (*argv, &pass_filter);
+}
+
+/*
+ * setactivefilter - Set the active filter for packets
+ */
+static int
+setprecompiledactivefilter(argv)
+    char **argv;
+{
+    return pcap_pre_compiled (*argv, &active_filter);
+}
+#endif
 
 #ifdef PPP_FILTER
 /*

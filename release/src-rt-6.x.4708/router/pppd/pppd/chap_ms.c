@@ -312,7 +312,8 @@ chapms2_verify_response(int id, char *name,
 
 static void
 chapms_make_response(unsigned char *response, int id, char *our_name,
-		     unsigned char *challenge, char *secret, int secret_len)
+		     unsigned char *challenge, char *secret, int secret_len,
+		     unsigned char *private)
 {
 	challenge++;	/* skip length, should be 8 */
 	*response++ = MS_CHAP_RESPONSE_LEN;
@@ -329,7 +330,7 @@ struct chapms2_response_cache_entry {
 #define CHAPMS2_MAX_RESPONSE_CACHE_SIZE 10
 static struct chapms2_response_cache_entry
     chapms2_response_cache[CHAPMS2_MAX_RESPONSE_CACHE_SIZE];
-static int chapms2_response_cache_next = 0;
+static int chapms2_response_cache_next_index = 0;
 static int chapms2_response_cache_size = 0;
 
 static void
@@ -337,36 +338,39 @@ chapms2_add_to_response_cache(int id, unsigned char *challenge,
 			      unsigned char *response,
 			      unsigned char *auth_response)
 {
-	struct chapms2_response_cache_entry *cache_entry;
+	int i = chapms2_response_cache_next_index;
 
-	cache_entry = &chapms2_response_cache[chapms2_response_cache_next++];
-	cache_entry->id = id;
-	memcpy(cache_entry->challenge, challenge, 16);
-	memcpy(cache_entry->response, response, MS_CHAP2_RESPONSE_LEN);
-	memcpy(cache_entry->auth_response, auth_response,
-	       MS_AUTH_RESPONSE_LENGTH);
-	if (chapms2_response_cache_next > chapms2_response_cache_size)
-		chapms2_response_cache_size = chapms2_response_cache_next;
-	chapms2_response_cache_next %= CHAPMS2_MAX_RESPONSE_CACHE_SIZE;
+	chapms2_response_cache[i].id = id;
+	memcpy(chapms2_response_cache[i].challenge, challenge, 16);
+	memcpy(chapms2_response_cache[i].response, response,
+	       MS_CHAP2_RESPONSE_LEN);
+	memcpy(chapms2_response_cache[i].auth_response,
+	       auth_response, MS_AUTH_RESPONSE_LENGTH);
+	chapms2_response_cache_next_index =
+		(i + 1) % CHAPMS2_MAX_RESPONSE_CACHE_SIZE;
+	if (chapms2_response_cache_next_index > chapms2_response_cache_size)
+		chapms2_response_cache_size = chapms2_response_cache_next_index;
+	dbglog("added response cache entry %d", i);
 }
 
-static struct chapms2_response_cache_entry *
+static struct chapms2_response_cache_entry*
 chapms2_find_in_response_cache(int id, unsigned char *challenge,
-			       unsigned char *auth_response)
+		      unsigned char *auth_response)
 {
-	struct chapms2_response_cache_entry *cache_entry;
 	int i;
 
 	for (i = 0; i < chapms2_response_cache_size; i++) {
-		cache_entry = &chapms2_response_cache[i];
-		if (id == cache_entry->id
+		if (id == chapms2_response_cache[i].id
 		    && (!challenge
-			|| memcmp(challenge, cache_entry->challenge,
+			|| memcmp(challenge,
+				  chapms2_response_cache[i].challenge,
 				  16) == 0)
 		    && (!auth_response
-			|| memcmp(auth_response, cache_entry->auth_response,
+			|| memcmp(auth_response,
+				  chapms2_response_cache[i].auth_response,
 				  MS_AUTH_RESPONSE_LENGTH) == 0)) {
-			return cache_entry;
+			dbglog("response found in cache (entry %d)", i);
+			return &chapms2_response_cache[i];
 		}
 	}
 	return NULL;  /* not found */
@@ -374,7 +378,8 @@ chapms2_find_in_response_cache(int id, unsigned char *challenge,
 
 static void
 chapms2_make_response(unsigned char *response, int id, char *our_name,
-		      unsigned char *challenge, char *secret, int secret_len)
+		      unsigned char *challenge, char *secret, int secret_len,
+		      unsigned char *private)
 {
 	const struct chapms2_response_cache_entry *cache_entry;
 	unsigned char auth_response[MS_AUTH_RESPONSE_LENGTH+1];
@@ -409,7 +414,7 @@ chapms2_check_success(int id, unsigned char *msg, int len)
 	msg += 2;
 	len -= 2;
 	if (len < MS_AUTH_RESPONSE_LENGTH
-	    || !chapms2_find_in_response_cache(id, NULL, msg)) {
+	    || !chapms2_find_in_response_cache(id, NULL /* challenge */, msg)) {
 		/* Authenticator Response did not match expected. */
 		error("MS-CHAPv2 mutual authentication failed.");
 		return 0;

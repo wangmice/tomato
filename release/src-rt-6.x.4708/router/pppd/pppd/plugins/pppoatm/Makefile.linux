@@ -1,7 +1,7 @@
 #CC	= gcc
 COPTS	= -O2 -g
-CFLAGS	= $(COPTS) -I../.. -I../../../include -fPIC $(EXTRACFLAGS)
-LDFLAGS	+= -shared
+CFLAGS	= $(COPTS) -I../.. -I../../../include -fPIC
+LDFLAGS	= -shared
 INSTALL	= install
 
 #***********************************************************************
@@ -12,7 +12,7 @@ LIBDIR = $(DESTDIR)/lib/pppd/$(VERSION)
 VERSION = $(shell awk -F '"' '/VERSION/ { print $$2; }' ../../patchlevel.h)
 
 PLUGIN := pppoatm.so
-PLUGIN_OBJS := pppoatm.o
+PLUGIN_OBJS := pppoatm.o 
 
 #*******
 # Do we have the ATM libraries installed? Set HAVE_LIBATM to use them,

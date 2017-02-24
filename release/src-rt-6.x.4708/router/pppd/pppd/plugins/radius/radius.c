@@ -651,9 +651,6 @@ radius_setparams(VALUE_PAIR *vp, char *msg, REQUEST_INFO *req_info,
 		    memcpy(rstate.class, vp->strvalue, rstate.class_len);
 		} /* else too big for our buffer - ignore it */
 		break;
-	    case PW_FRAMED_MTU:
-		netif_set_mtu(rstate.client_port,MIN(netif_get_mtu(rstate.client_port),vp->lvalue));
-		break;
 	    }
 
 
@@ -1306,13 +1303,10 @@ radius_init(char *msg)
 *  Extracts the port number from the interface name
 ***********************************************************************/
 static int
-get_client_port(char *_ifname)
+get_client_port(char *ifname)
 {
     int port;
-    if (strcmp(ifname, _ifname) == 0) {
-	return ifunit;
-    }
-    if (sscanf(_ifname, "ppp%d", &port) == 1) {
+    if (sscanf(ifname, "ppp%d", &port) == 1) {
 	return port;
     }
     return rc_map2id(ifname);

@@ -423,9 +423,6 @@ lcp_close(unit, reason)
 	f->flags &= ~DELAYED_UP;
 	lcp_finished(f);
     }
-/* JYWeng 20031216: add to wanstatus.log */
-    save_wanstatus(reason);
-/* JYWeng 20031216: add to wanstatus.log */
 }
 
 

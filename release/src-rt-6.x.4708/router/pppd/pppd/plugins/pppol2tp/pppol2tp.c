@@ -117,8 +117,14 @@ static option_t pppol2tp_options[] = {
 
 static int setdevname_pppol2tp(char **argv)
 {
-	struct sockaddr_pppol2tp sax;
-	int len = sizeof(sax);
+	union {
+		char buffer[128];
+		struct sockaddr pppol2tp;
+	} s;
+	int len = sizeof(s);
+	char **a;
+	int tmp;
+	int tmp_len = sizeof(tmp);
 
 	if (device_got_set)
 		return 0;
@@ -126,21 +132,25 @@ static int setdevname_pppol2tp(char **argv)
 	if (!int_option(*argv, &pppol2tp_fd))
 		return 0;
 
-	if(getsockname(pppol2tp_fd, (struct sockaddr *)&sax, &len) < 0) {
+	if(getsockname(pppol2tp_fd, (struct sockaddr *)&s, &len) < 0) {
 		fatal("Given FD for PPPoL2TP socket invalid (%s)",
 		      strerror(errno));
 	}
-	if(sax.sa_family != AF_PPPOX || sax.sa_protocol != PX_PROTO_OL2TP) {
-		fatal("Socket is not a PPPoL2TP socket");
+	if(s.pppol2tp.sa_family != AF_PPPOX) {
+		fatal("Socket of not a PPPoX socket");
 	}
 
 	/* Do a test getsockopt() to ensure that the kernel has the necessary
 	 * feature available.
-	 * driver returns -ENOTCONN until session established!
+	 */
 	if (getsockopt(pppol2tp_fd, SOL_PPPOL2TP, PPPOL2TP_SO_DEBUG,
 		       &tmp, &tmp_len) < 0) {
 		fatal("PPPoL2TP kernel driver not installed");
-	} */
+	}
+
+	pppol2tp_fd_str = strdup(*argv);
+	if (pppol2tp_fd_str == NULL)
+		novm("PPPoL2TP FD");
 
 	/* Setup option defaults. Compression options are disabled! */
 
@@ -169,15 +179,9 @@ static int setdevname_pppol2tp(char **argv)
 
 static int connect_pppol2tp(void)
 {
-	struct sockaddr_pppol2tp sax;
-	int len = sizeof(sax);
-
 	if(pppol2tp_fd == -1) {
 		fatal("No PPPoL2TP FD specified");
 	}
-
-	getsockname(pppol2tp_fd, (struct sockaddr *)&sax, &len);
-	sprintf(ppp_devnam, "l2tp (%s)", inet_ntoa(sax.pppol2tp.addr.sin_addr));
 
 	return pppol2tp_fd;
 }
@@ -486,12 +490,7 @@ static void pppol2tp_cleanup(void)
 
 void plugin_init(void)
 {
-#if defined(__linux__)
-	extern int new_style_driver;	/* From sys-linux.c */
-	if (!ppp_available() && !new_style_driver)
-		fatal("Kernel doesn't support ppp_generic - "
-		    "needed for PPPoL2TP");
-#else
+#if !defined(__linux__)
 	fatal("No PPPoL2TP support on this OS");
 #endif
 	add_options(pppol2tp_options);
@@ -501,10 +500,8 @@ void plugin_init(void)
 	 */
 	add_notifier(&ip_up_notifier, pppol2tp_ip_up, NULL);
 	add_notifier(&ip_down_notifier, pppol2tp_ip_down, NULL);
-#ifdef INET6
 	add_notifier(&ipv6_up_notifier, pppol2tp_ip_up, NULL);
 	add_notifier(&ipv6_down_notifier, pppol2tp_ip_down, NULL);
-#endif
 }
 
 struct channel pppol2tp_channel = {

@@ -56,7 +56,8 @@ static void iterate_bundle_links __P((void (*func) __P((char *))));
 
 static int get_default_epdisc __P((struct epdisc *));
 static int parse_num __P((char *str, const char *key, int *valp));
-static int owns_unit __P((TDB_DATA pid, int unit));
+static int parse_str __P((char *str, const char *key, char *buf, int buflen));
+static int owns_link __P((TDB_DATA pid, char *ifname));
 
 #define set_ip_epdisc(ep, addr) do {	\
 	ep->length = 4;			\
@@ -197,35 +198,38 @@ mp_join_bundle()
 	key.dptr = bundle_id;
 	key.dsize = p - bundle_id;
 	pid = tdb_fetch(pppdb, key);
+
 	if (pid.dptr != NULL) {
+		char tmp[IFNAMSIZ];
+
 		/* bundle ID exists, see if the pppd record exists */
 		rec = tdb_fetch(pppdb, pid);
+
 		if (rec.dptr != NULL && rec.dsize > 0) {
 			/* make sure the string is null-terminated */
 			rec.dptr[rec.dsize-1] = 0;
-			/* parse the interface number */
-			parse_num(rec.dptr, "IFUNIT=ppp", &unit);
+
 			/* check the pid value */
 			if (!parse_num(rec.dptr, "PPPD_PID=", &pppd_pid)
+			    || !parse_str(rec.dptr, "IFNAME=", tmp, sizeof(tmp))
+			    || !parse_num(rec.dptr, "IFUNIT=", &unit)
 			    || !process_exists(pppd_pid)
-			    || !owns_unit(pid, unit))
+			    || !owns_link(pid, tmp))
 				unit = -1;
 			free(rec.dptr);
 		}
 		free(pid.dptr);
-	}
 
-	if (unit >= 0) {
 		/* attach to existing unit */
-		if (bundle_attach(unit)) {
+		if (unit >= 0 && bundle_attach(unit)) {
 			set_ifunit(0);
 			script_setenv("BUNDLE", bundle_id + 7, 0);
 			make_bundle_links(1);
 			unlock_db();
-			info("Link attached to %s", ifname);
+			info("Link attached to %s", tmp);
 			return 1;
+			/* attach failed because bundle doesn't exist */
 		}
-		/* attach failed because bundle doesn't exist */
 	}
 
 	/* we have to make a new bundle */
@@ -267,9 +271,8 @@ void mp_bundle_terminated()
 	notice("Connection terminated.");
 	print_link_stats();
 	if (!demand) {
-		remove_pidfiles(1);
+		remove_pidfiles();
 		script_unsetenv("IFNAME");
-		script_unsetenv("IFUNIT");
 	}
 
 	lock_db();
@@ -409,22 +412,45 @@ parse_num(str, key, valp)
 	return 0;
 }
 
+static int
+parse_str(str, key, buf, buflen)
+     char *str;
+     const char *key;
+     char *buf;
+     int buflen;
+{
+	char *p, *endp;
+	int i;
+
+	p = strstr(str, key);
+	if (p) {
+		p += strlen(key);
+		while (--buflen && *p != 0 && *p != ';')
+			*(buf++) = *(p++);
+		*buf = 0;
+		return 1;
+	}
+	return 0;
+}
+
 /*
- * Check whether the pppd identified by `key' still owns ppp unit `unit'.
+ * Check whether the pppd identified by `key' still owns ppp link `ifname'.
  */
 static int
-owns_unit(key, unit)
+owns_link(key, ifname)
      TDB_DATA key;
-     int unit;
+     char *ifname;
 {
-	char ifkey[32];
+	char ifkey[7 + IFNAMSIZ];
 	TDB_DATA kd, vd;
 	int ret = 0;
 
-	slprintf(ifkey, sizeof(ifkey), "IFUNIT=ppp%d", unit);
+	slprintf(ifkey, sizeof(ifkey), "IFNAME=%s", ifname);
+
 	kd.dptr = ifkey;
 	kd.dsize = strlen(ifkey);
 	vd = tdb_fetch(pppdb, kd);
+
 	if (vd.dptr != NULL) {
 		ret = vd.dsize == key.dsize
 			&& memcmp(vd.dptr, key.dptr, vd.dsize) == 0;

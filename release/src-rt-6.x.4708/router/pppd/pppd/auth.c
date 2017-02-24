@@ -240,10 +240,6 @@ bool explicit_passwd = 0;	/* Set if "password" option supplied */
 char remote_name[MAXNAMELEN];	/* Peer's name for authentication */
 
 static char *uafname;		/* name of most recent +ua file */
-static char *path_chapfile = _PATH_CHAPFILE;	/* pathname of chap-secrets file */
-static char *path_authup = _PATH_AUTHUP;	/* pathname of auth-up script */
-static char *path_authdown = _PATH_AUTHDOWN;	/* pathname of auth-down script */
-static char *path_authfail = _PATH_AUTHFAIL;	/* pathname of auth-fail script */
 
 extern char *crypt __P((const char *, const char *));
 
@@ -263,7 +259,7 @@ static int  scan_authfile __P((FILE *, char *, char *, char *,
 			       struct wordlist **, struct wordlist **,
 			       char *, int));
 static void free_wordlist __P((struct wordlist *));
-static void auth_script __P((char *, int));
+static void auth_script __P((char *));
 static void auth_script_done __P((void *));
 static void set_allowed_addrs __P((int, struct wordlist *, struct wordlist *));
 static int  some_ip_ok __P((struct wordlist *));
@@ -404,16 +400,6 @@ option_t auth_options[] = {
     { "allow-number", o_special, (void *)set_permitted_number,
       "Set telephone number(s) which are allowed to connect",
       OPT_PRIV | OPT_A2LIST },
-
-    { "chap-secrets", o_string, &path_chapfile,
-      "Set pathname of chap-secrets file", OPT_PRIO },
-
-    { "auth-up-script", o_string, &path_authup,
-      "Set pathname of auth-up script", OPT_PRIV },
-    { "auth-down-script", o_string, &path_authdown,
-      "Set pathname of auth-down script", OPT_PRIV },
-    { "auth-fail-script", o_string, &path_authfail,
-      "Set pathname of auth-fail script", OPT_PRIV },
 
     { NULL }
 };
@@ -567,9 +553,6 @@ link_required(unit)
 void start_link(unit)
     int unit;
 {
-     /* we are called via link_terminated, must be ignored */
-    if (phase == PHASE_DISCONNECT)
-	return;
     status = EXIT_CONNECT_FAILED;
     new_phase(PHASE_SERIALCONN);
 
@@ -651,7 +634,7 @@ link_terminated(unit)
      * we delete its pid file.
      */
     if (!doing_multilink && !demand)
-	remove_pidfiles(1);
+	remove_pidfiles();
 
     /*
      * If we may want to bring the link up again, transfer
@@ -668,10 +651,8 @@ link_terminated(unit)
     }
     if (!hungup)
 	lcp_lowerdown(0);
-    if (!doing_multilink && !demand) {
+    if (!doing_multilink && !demand)
 	script_unsetenv("IFNAME");
-	script_unsetenv("IFUNIT");
-    }
 
     /*
      * Run disconnector script, if requested.
@@ -681,7 +662,6 @@ link_terminated(unit)
 	the_channel->disconnect();
 	devfd = -1;
     }
-    /* not only disconnect, cleanup should also be called to close the devices */
     if (the_channel->cleanup)
 	(*the_channel->cleanup)();
 
@@ -709,7 +689,7 @@ link_down(unit)
 	if (auth_script_state == s_up && auth_script_pid == 0) {
 	    update_link_stats(unit);
 	    auth_script_state = s_down;
-	    auth_script(path_authdown, 0);
+	    auth_script(_PATH_AUTHDOWN);
 	}
     }
     if (!doing_multilink) {
@@ -841,7 +821,7 @@ network_phase(unit)
 	auth_state = s_up;
 	if (auth_script_state == s_down && auth_script_pid == 0) {
 	    auth_script_state = s_up;
-	    auth_script(path_authup, 0);
+	    auth_script(_PATH_AUTHUP);
 	}
     }
 
@@ -942,7 +922,6 @@ auth_peer_fail(unit, protocol)
      * Authentication failure: take the link down
      */
     status = EXIT_PEER_AUTH_FAILED;
-    auth_script(path_authfail, 1);
     lcp_close(unit, "Authentication failed");
 }
 
@@ -1021,7 +1000,6 @@ auth_withpeer_fail(unit, protocol)
      * authentication secrets.
      */
     status = EXIT_AUTH_TOPEER_FAILED;
-    auth_script(path_authfail, 1);
     lcp_close(unit, "Failed to authenticate ourselves to peer");
 }
 
@@ -1210,10 +1188,6 @@ check_idle(arg)
     if (idle_time_hook != 0) {
 	tlim = idle_time_hook(&idle);
     } else {
-/* JYWeng 20031216: replace itime with idle.xmit_idle for only outgoing traffic is counted*/
-	if(tx_only) 
-		itime = idle.xmit_idle;
-	else
 	itime = MIN(idle.xmit_idle, idle.recv_idle);
 	tlim = idle_time_limit - itime;
     }
@@ -1667,7 +1641,7 @@ have_chap_secret(client, server, need_ip, lacks_ipp)
 	}
     }
 
-    filename = path_chapfile;
+    filename = _PATH_CHAPFILE;
     f = fopen(filename, "r");
     if (f == NULL)
 	return 0;
@@ -1762,7 +1736,7 @@ get_secret(unit, client, server, secret, secret_len, am_server)
 	    return 0;
 	}
     } else {
-	filename = path_chapfile;
+	filename = _PATH_CHAPFILE;
 	addrs = NULL;
 	secbuf[0] = 0;
 
@@ -2341,13 +2315,13 @@ auth_script_done(arg)
     case s_up:
 	if (auth_state == s_down) {
 	    auth_script_state = s_down;
-	    auth_script(path_authdown, 0);
+	    auth_script(_PATH_AUTHDOWN);
 	}
 	break;
     case s_down:
 	if (auth_state == s_up) {
 	    auth_script_state = s_up;
-	    auth_script(path_authup, 0);
+	    auth_script(_PATH_AUTHUP);
 	}
 	break;
     }
@@ -2358,9 +2332,8 @@ auth_script_done(arg)
  * interface-name peer-name real-user tty speed
  */
 static void
-auth_script(script, wait)
+auth_script(script)
     char *script;
-    int wait;
 {
     char strspeed[32];
     struct passwd *pw;
@@ -2382,12 +2355,7 @@ auth_script(script, wait)
     argv[3] = user_name;
     argv[4] = devnam;
     argv[5] = strspeed;
-    argv[6] = ipparam;
-    argv[7] = NULL;
+    argv[6] = NULL;
 
-    if (wait)
-	run_program(script, argv, 0, NULL, NULL, 1);
-    else
-	auth_script_pid = run_program(script, argv, 0, auth_script_done,
-				      NULL, 0);
+    auth_script_pid = run_program(script, argv, 0, auth_script_done, NULL, 0);
 }

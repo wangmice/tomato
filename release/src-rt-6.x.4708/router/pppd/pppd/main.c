@@ -318,6 +318,11 @@ main(argc, argv)
     struct protent *protp;
     char numbuf[16];
 
+    strlcpy(path_ipup, _PATH_IPUP, sizeof(path_ipup));
+    strlcpy(path_ipdown, _PATH_IPDOWN, sizeof(path_ipdown));
+    strlcpy(path_ipv6up, _PATH_IPV6UP, sizeof(path_ipv6up));
+    strlcpy(path_ipv6down, _PATH_IPV6DOWN, sizeof(path_ipv6down));
+
     link_stats_valid = 0;
     new_phase(PHASE_INITIALIZE);
 
@@ -431,13 +436,6 @@ main(argc, argv)
 	    fatal("Critical shortage of file descriptors: dup failed: %m");
 	fd_devnull = i;
     }
-
-    /*
-     * pppd sends signals to the whole process group, so it must always
-     * create a new one or it may kill the parent process and its siblings.
-     */
-    setsid();
-    chdir("/");
 
     /*
      * Initialize system-dependent stuff.
@@ -747,12 +745,12 @@ void
 set_ifunit(iskey)
     int iskey;
 {
-    slprintf(ifname, sizeof(ifname), "%s%d", PPP_DRV_NAME, ifunit);
-    script_setenv("IFUNIT", ifname, iskey);
-    if (req_ifname[0])
-	sifname(ifunit, req_ifname);
+    if (use_ifname[0] == 0)
+	slprintf(ifname, sizeof(ifname), "%s%d", PPP_DRV_NAME, ifunit);
+    else
+	slprintf(ifname, sizeof(ifname), "%s", use_ifname);
     info("Using interface %s", ifname);
-    script_setenv("IFNAME", ifname, 0);
+    script_setenv("IFNAME", ifname, iskey);
     if (iskey) {
 	create_pidfile(getpid());	/* write pid to file */
 	create_linkpidfile(getpid());
@@ -783,10 +781,11 @@ detach()
 	/* update pid files if they have been written already */
 	if (pidfilename[0])
 	    create_pidfile(pid);
-	if (linkpidfile[0])
-	    create_linkpidfile(pid);
+	create_linkpidfile(pid);
 	exit(0);		/* parent dies */
     }
+    setsid();
+    chdir("/");
     dup2(fd_devnull, 0);
     dup2(fd_devnull, 1);
     dup2(fd_devnull, 2);
@@ -857,14 +856,11 @@ create_linkpidfile(pid)
 /*
  * remove_pidfile - remove our pid files
  */
-void remove_pidfiles(keep_linkpid)
-    int keep_linkpid;
+void remove_pidfiles()
 {
     if (pidfilename[0] != 0 && unlink(pidfilename) < 0 && errno != ENOENT)
 	warn("unable to delete pid file %s: %m", pidfilename);
     pidfilename[0] = 0;
-    if (keep_linkpid)
-	return;
     if (linkpidfile[0] != 0 && unlink(linkpidfile) < 0 && errno != ENOENT)
 	warn("unable to delete pid file %s: %m", linkpidfile);
     linkpidfile[0] = 0;
@@ -890,9 +886,9 @@ struct protocol_list {
     { 0x23,	"OSI Network Layer" },
     { 0x25,	"Xerox NS IDP" },
     { 0x27,	"DECnet Phase IV" },
-#endif
     { 0x29,	"Appletalk" },
     { 0x2b,	"Novell IPX" },
+#endif
     { 0x2d,	"VJ compressed TCP/IP" },
     { 0x2f,	"VJ uncompressed TCP/IP" },
     { 0x31,	"Bridging PDU" },
@@ -975,10 +971,8 @@ struct protocol_list {
     { 0x8023,	"OSI Network Layer Control Protocol" },
     { 0x8025,	"Xerox NS IDP Control Protocol" },
     { 0x8027,	"DECnet Phase IV Control Protocol" },
-#endif
     { 0x8029,	"Appletalk Control Protocol" },
     { 0x802b,	"Novell IPX Control Protocol" },
-#if 0
     { 0x8031,	"Bridging NCP" },
     { 0x8033,	"Stream Protocol Control Protocol" },
     { 0x8035,	"Banyan Vines Control Protocol" },
@@ -1085,7 +1079,8 @@ get_input()
 	}
 	notice("Modem hangup");
 	hungup = 1;
-	status = EXIT_HANGUP;
+	if (status == EXIT_OK)
+		status = EXIT_HANGUP;
 	lcp_lowerdown(0);	/* serial link is no longer available */
 	link_terminated(0);
 	return;
@@ -1232,7 +1227,7 @@ cleanup()
 	the_channel->disestablish_ppp(devfd);
     if (the_channel->cleanup)
 	(*the_channel->cleanup)();
-    remove_pidfiles(0);
+    remove_pidfiles();
 
 #ifdef USE_TDB
     if (pppdb != NULL)
@@ -1312,33 +1307,30 @@ static int uptime_diff_set = 0;
 
 static void check_time(void)
 {
-    long new_diff;
-    struct timeval t;
-    struct sysinfo i;
+	long new_diff;
+	struct timeval t;
+	struct sysinfo i;
     struct callout *p;
+	
+	gettimeofday(&t, NULL);
+	sysinfo(&i);
+	new_diff = t.tv_sec - i.uptime;
+	
+	if (!uptime_diff_set) {
+		uptime_diff = new_diff;
+		uptime_diff_set = 1;
+		return;
+	}
 
-    if (nochecktime)
-	return;
-
-    gettimeofday(&t, NULL);
-    sysinfo(&i);
-    new_diff = t.tv_sec - i.uptime;
-
-    if (!uptime_diff_set) {
+	if ((new_diff - 5 > uptime_diff) || (new_diff + 5 < uptime_diff)) {
+		/* system time has changed, update counters and timeouts */
+		info("System time change detected.");
+		start_time.tv_sec += new_diff - uptime_diff;
+		
+    	for (p = callout; p != NULL; p = p->c_next)
+			p->c_time.tv_sec += new_diff - uptime_diff;
+	}
 	uptime_diff = new_diff;
-	uptime_diff_set = 1;
-	return;
-    }
-
-    if ((new_diff - 5 > uptime_diff) || (new_diff + 5 < uptime_diff)) {
-	/* system time has changed, update counters and timeouts */
-	info("System time change detected.");
-	start_time.tv_sec += new_diff - uptime_diff;
-
-	for (p = callout; p != NULL; p = p->c_next)
-	    p->c_time.tv_sec += new_diff - uptime_diff;
-    }
-    uptime_diff = new_diff;
 }
 
 /*
@@ -1410,8 +1402,8 @@ calltimeout()
 {
     struct callout *p;
 
-    check_time();
-
+	check_time();
+	
     while (callout != NULL) {
 	p = callout;
 
@@ -1439,8 +1431,8 @@ timeleft(tvp)
 {
     if (callout == NULL)
 	return NULL;
-
-    check_time();
+	
+	check_time();
 
     gettimeofday(&timenow, NULL);
     tvp->tv_sec = callout->c_time.tv_sec - timenow.tv_sec;
@@ -1760,7 +1752,7 @@ device_script(program, in, out, dont_wait)
     if (log_to_fd >= 0)
 	errfd = log_to_fd;
     else
-	errfd = open(_PATH_CONNERRS, O_WRONLY | O_APPEND | O_CREAT, 0644);
+	errfd = open(_PATH_CONNERRS, O_WRONLY | O_APPEND | O_CREAT, 0600);
 
     ++conn_running;
     pid = safe_fork(in, out, errfd);

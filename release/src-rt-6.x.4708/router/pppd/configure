@@ -131,7 +131,7 @@ if [ -d "$ksrc" ]; then :; else
 fi
 
 case $state in
-  neolithic) 
+  neolithic)
     echo "This is a newer release on an outdated OS ($system)."
     echo " This software may or may not work on this OS."
     echo " You may want to download an older version of PPP for this OS.";;

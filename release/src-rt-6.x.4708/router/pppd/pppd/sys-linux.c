@@ -73,12 +73,12 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/time.h>
-#include <sys/errno.h>
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <sys/utsname.h>
 #include <sys/sysmacros.h>
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <syslog.h>
@@ -102,22 +102,15 @@
 #define MAX_ADDR_LEN 7
 #endif
 
-#if __GLIBC__ >= 2
 #include <asm/types.h>		/* glibc 2 conflicts with linux/types.h */
 #include <net/if.h>
 #include <net/if_arp.h>
 #include <net/route.h>
 #include <netinet/if_ether.h>
-#else
-#include <linux/types.h>
-#include <linux/if.h>
-#include <linux/if_arp.h>
-#include <linux/route.h>
-#include <linux/if_ether.h>
-#endif
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include <linux/sockios.h>
 #include <linux/ppp_defs.h>
 #include <linux/if_ppp.h>
 
@@ -168,6 +161,10 @@ struct in6_ifreq {
 /* We can get an EIO error on an ioctl if the modem has hung up */
 #define ok_error(num) ((num)==EIO)
 
+#if !defined(PPP_DRV_NAME)
+#define PPP_DRV_NAME	"ppp"
+#endif /* !defined(PPP_DRV_NAME) */
+
 static int tty_disc = N_TTY;	/* The TTY discipline */
 static int ppp_disc = N_PPP;	/* The PPP discpline */
 static int initfdflags = -1;	/* Initial file descriptor flags for fd */
@@ -199,7 +196,7 @@ static int driver_is_old       = 0;
 static int restore_term        = 0;	/* 1 => we've munged the terminal */
 static struct termios inittermios;	/* Initial TTY termios */
 
-int new_style_driver = 0;
+static const int new_style_driver = 1;
 
 static char loop_name[20];
 static unsigned char inbuf[512]; /* buffer for chars read from loopback */
@@ -207,6 +204,8 @@ static unsigned char inbuf[512]; /* buffer for chars read from loopback */
 static int	if_is_up;	/* Interface has been marked up */
 static int	if6_is_up;	/* Interface has been marked up for IPv6, to help differentiate */
 static int	have_default_route;	/* Gateway for default route added */
+static struct	rtentry old_def_rt;	/* Old default route */
+static int	default_rt_repl_rest;	/* replace and restore old default rt */
 static u_int32_t proxy_arp_addr;	/* Addr for proxy arp entry added */
 static char proxy_arp_dev[16];		/* Device for proxy arp entry */
 static u_int32_t our_old_addr;		/* for detecting address changes */
@@ -215,8 +214,8 @@ static int	looped;			/* 1 if using loop */
 static int	link_mtu;		/* mtu for the link (not bundle) */
 
 static struct utsname utsname;	/* for the kernel version */
-static int kernel_version;
 #define KVERSION(j,n,p)	((j)*1000000 + (n)*1000 + (p))
+static const int kernel_version = KVERSION(2,6,37);
 
 #define MAX_IFS		100
 
@@ -340,10 +339,8 @@ void sys_cleanup(void)
 	if_is_up = 0;
 	sifdown(0);
     }
-#ifdef INET6
     if (if6_is_up)
 	sif6down(0);
-#endif /* INET6 */
 
 /*
  * Delete any routes through the device.
@@ -627,7 +624,8 @@ void generic_disestablish_ppp(int dev_fd)
  */
 static int make_ppp_unit()
 {
-	int x, flags;
+	struct ifreq ifr;
+	int x, flags, s;
 
 	if (ppp_dev_fd >= 0) {
 		dbglog("in make_ppp_unit, already had /dev/ppp open?");
@@ -641,17 +639,39 @@ static int make_ppp_unit()
 	    || fcntl(ppp_dev_fd, F_SETFL, flags | O_NONBLOCK) == -1)
 		warn("Couldn't set /dev/ppp to nonblock: %m");
 
-	ifunit = (req_unit >= 0) ? req_unit : req_minunit;
-	do {
+	ifunit = req_unit;
+	x = ioctl(ppp_dev_fd, PPPIOCNEWUNIT, &ifunit);
+	if (x < 0 && req_unit >= 0 && errno == EEXIST) {
+		warn("Couldn't allocate PPP unit %d as it is already in use", req_unit);
+		ifunit = -1;
 		x = ioctl(ppp_dev_fd, PPPIOCNEWUNIT, &ifunit);
-		if (x < 0 && errno == EEXIST) {
-			warn("Couldn't allocate PPP unit %d as it is already in use", ifunit);
-			ifunit = (req_unit >= 0) ? -1 : ++req_minunit;
-		} else break;
-	} while (ifunit < MAXUNIT);
-
+	}
 	if (x < 0)
 		error("Couldn't create new ppp unit: %m");
+
+	if (use_ifname[0] != 0) {
+		s = socket(PF_INET, SOCK_DGRAM, 0);
+		if (s < 0)
+			s = socket(PF_PACKET, SOCK_DGRAM, 0);
+		if (s < 0)
+			s = socket(PF_INET6, SOCK_DGRAM, 0);
+		if (s < 0)
+			s = socket(PF_UNIX, SOCK_DGRAM, 0);
+		if (s >= 0) {
+			slprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "%s%d", PPP_DRV_NAME, ifunit);
+			slprintf(ifr.ifr_newname, sizeof(ifr.ifr_newname), "%s", use_ifname);
+			x = ioctl(s, SIOCSIFNAME, &ifr);
+			close(s);
+		} else {
+			x = s;
+		}
+		if (x < 0) {
+			error("Couldn't rename %s to %s", ifr.ifr_name, ifr.ifr_newname);
+			close(ppp_dev_fd);
+			ppp_dev_fd = -1;
+		}
+	}
+
 	return x;
 }
 
@@ -678,6 +698,16 @@ void cfg_bundle(int mrru, int mtru, int rssn, int tssn)
 	add_fd(ppp_dev_fd);
 }
 
+static void
+setenv_ifunit(void)
+{
+#ifdef USE_TDB
+	char tmp[11];
+	slprintf(tmp, sizeof(tmp), "%d", ifunit);
+	script_setenv("IFUNIT", tmp, 0);
+#endif
+}
+
 /*
  * make_new_bundle - create a new PPP unit (i.e. a bundle)
  * and connect our channel to it.  This should only get called
@@ -696,6 +726,8 @@ void make_new_bundle(int mrru, int mtru, int rssn, int tssn)
 
 	/* set the mrru and flags */
 	cfg_bundle(mrru, mtru, rssn, tssn);
+
+	setenv_ifunit();
 }
 
 /*
@@ -1419,11 +1451,12 @@ int ccp_fatal_error (int unit)
  *
  * path_to_procfs - find the path to the proc file system mount point
  */
-static char proc_path[MAXPATHLEN];
-static int proc_path_len;
+static char proc_path[MAXPATHLEN] = "/proc";
+static int proc_path_len = 5;
 
 static char *path_to_procfs(const char *tail)
 {
+#if 0
     struct mntent *mntent;
     FILE *fp;
 
@@ -1445,6 +1478,7 @@ static char *path_to_procfs(const char *tail)
 	    fclose (fp);
 	}
     }
+#endif
 
     strlcpy(proc_path + proc_path_len, tail,
 	    sizeof(proc_path) - proc_path_len);
@@ -1556,6 +1590,9 @@ static int read_route_table(struct rtentry *rt)
 	p = NULL;
     }
 
+    SET_SA_FAMILY (rt->rt_dst,     AF_INET);
+    SET_SA_FAMILY (rt->rt_gateway, AF_INET);
+
     SIN_ADDR(rt->rt_dst) = strtoul(cols[route_dest_col], NULL, 16);
     SIN_ADDR(rt->rt_gateway) = strtoul(cols[route_gw_col], NULL, 16);
     SIN_ADDR(rt->rt_genmask) = strtoul(cols[route_mask_col], NULL, 16);
@@ -1625,24 +1662,58 @@ int have_route_to(u_int32_t addr)
 /********************************************************************
  *
  * sifdefaultroute - assign a default route through the address given.
+ *
+ * If the global default_rt_repl_rest flag is set, then this function
+ * already replaced the original system defaultroute with some other
+ * route and it should just replace the current defaultroute with
+ * another one, without saving the current route. Use: demand mode,
+ * when pppd sets first a defaultroute it it's temporary ppp0 addresses
+ * and then changes the temporary addresses to the addresses for the real
+ * ppp connection when it has come up.
  */
 
-int sifdefaultroute (int unit, u_int32_t ouraddr, u_int32_t gateway)
+int sifdefaultroute (int unit, u_int32_t ouraddr, u_int32_t gateway, bool replace)
 {
-    struct rtentry rt;
+    struct rtentry rt, tmp_rt;
+    struct rtentry *del_rt = NULL;
 
-    if (defaultroute_exists(&rt) && strcmp(rt.rt_dev, ifname) != 0) {
-	if (rt.rt_flags & RTF_GATEWAY)
-	    error("not replacing existing default route via %I",
-		  SIN_ADDR(rt.rt_gateway));
-	else
+    if (default_rt_repl_rest) {
+	/* We have already reclaced the original defaultroute, if we
+	   are called again, we will delete the current default route
+	   and set the new default route in this function.
+	   - this is normally only the case the doing demand: */
+	if (defaultroute_exists(&tmp_rt))
+	    del_rt = &tmp_rt;
+    } else if (defaultroute_exists(&old_def_rt) &&
+	       strcmp(old_def_rt.rt_dev, ifname) != 0) {
+	/* We did not yet replace an existing default route, let's
+	   check if we should save and replace a default route: */
+	if (old_def_rt.rt_flags & RTF_GATEWAY) {
+	    if (!replace) {
+		error("not replacing existing default route via %I",
+		      SIN_ADDR(old_def_rt.rt_gateway));
+		return 0;
+	    } else {
+		/* we need to copy rt_dev because we need it permanent too: */
+		char *tmp_dev = malloc(strlen(old_def_rt.rt_dev) + 1);
+		strcpy(tmp_dev, old_def_rt.rt_dev);
+		old_def_rt.rt_dev = tmp_dev;
+
+		notice("replacing old default route to %s [%I]",
+			old_def_rt.rt_dev, SIN_ADDR(old_def_rt.rt_gateway));
+		default_rt_repl_rest = 1;
+		del_rt = &old_def_rt;
+	    }
+	} else
 	    error("not replacing existing default route through %s",
-		  rt.rt_dev);
-	return 0;
+		  old_def_rt.rt_dev);
     }
 
     memset (&rt, 0, sizeof (rt));
     SET_SA_FAMILY (rt.rt_dst, AF_INET);
+
+    SET_SA_FAMILY(rt.rt_gateway, AF_INET);
+    SIN_ADDR(rt.rt_gateway) = gateway;
 
     rt.rt_dev = ifname;
 
@@ -1651,12 +1722,18 @@ int sifdefaultroute (int unit, u_int32_t ouraddr, u_int32_t gateway)
 	SIN_ADDR(rt.rt_genmask) = 0L;
     }
 
-    rt.rt_flags = RTF_UP;
+    rt.rt_flags = RTF_UP | RTF_GATEWAY;
     if (ioctl(sock_fd, SIOCADDRT, &rt) < 0) {
-	if ( ! ok_error ( errno ))
+	if (!ok_error(errno))
 	    error("default route ioctl(SIOCADDRT): %m");
 	return 0;
     }
+    if (default_rt_repl_rest && del_rt)
+        if (ioctl(sock_fd, SIOCDELRT, del_rt) < 0) {
+	    if (!ok_error(errno))
+	        error("del old default route ioctl(SIOCDELRT): %m");
+	    return 0;
+        }
 
     have_default_route = 1;
     return 1;
@@ -1684,13 +1761,24 @@ int cifdefaultroute (int unit, u_int32_t ouraddr, u_int32_t gateway)
 	SIN_ADDR(rt.rt_genmask) = 0L;
     }
 
+    rt.rt_dev = ifname;
     rt.rt_flags = RTF_UP;
     if (ioctl(sock_fd, SIOCDELRT, &rt) < 0 && errno != ESRCH) {
 	if (still_ppp()) {
-	    if ( ! ok_error ( errno ))
+	    if (!ok_error(errno))
 		error("default route ioctl(SIOCDELRT): %m");
 	    return 0;
 	}
+    }
+    if (default_rt_repl_rest) {
+	notice("restoring old default route to %s [%I]",
+		old_def_rt.rt_dev, SIN_ADDR(old_def_rt.rt_gateway));
+        if (ioctl(sock_fd, SIOCADDRT, &old_def_rt) < 0) {
+	    if (!ok_error(errno))
+	        error("restore default route ioctl(SIOCADDRT): %m");
+	    return 0;
+        }
+        default_rt_repl_rest = 0;
     }
 
     return 1;
@@ -2043,15 +2131,19 @@ int ppp_available(void)
     int    my_version, my_modification, my_patch;
     int osmaj, osmin, ospatch;
 
+#if 0
     /* get the kernel version now, since we are called before sys_init */
     uname(&utsname);
     osmaj = osmin = ospatch = 0;
     sscanf(utsname.release, "%d.%d.%d", &osmaj, &osmin, &ospatch);
     kernel_version = KVERSION(osmaj, osmin, ospatch);
+#endif
 
     fd = open("/dev/ppp", O_RDWR);
     if (fd >= 0) {
+#if 0
 	new_style_driver = 1;
+#endif
 
 	/* XXX should get from driver */
 	driver_version = 2;
@@ -2111,6 +2203,7 @@ int ppp_available(void)
 
     if (ok && ((ifr.ifr_hwaddr.sa_family & ~0xFF) != ARPHRD_PPP))
 	ok = 0;
+	return ok;
 
 /*
  *  This is the PPP device. Validate the version of the driver at this
@@ -2264,47 +2357,6 @@ int sifvjcomp (int u, int vjcomp, int cidcomp, int maxcid)
 	modify_flags(ppp_dev_fd, SC_COMP_TCP|SC_NO_TCP_CCID, x);
 
 	return 1;
-}
-
-/********************************************************************
- *
- * sifname - Config the interface name.
- */
-int sifname (int unit, const char *newname)
-{
-    struct ifreq ifr;
-    int ifindex;
-
-    if (strcmp(ifname, newname) == 0)
-	return 1;
-
-    memset(&ifr, 0, sizeof(ifr));
-    strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-
-    /* Get and keep interface index */
-    if (ioctl(sock_fd, SIOCGIFINDEX, (caddr_t) &ifr) < 0) {
-	error("ioctl (SIOCGIFINDEX): %m (line %d)", __LINE__);
-	return 0;
-    }
-    ifindex = ifr.ifr_ifindex;
-
-    /* Set new interface name, patterns such as "vpn%d" are allowed
-     * by kernel, the lowest available slot will be used */
-    strlcpy(ifr.ifr_newname, newname, sizeof(ifr.ifr_newname));
-    if (ioctl(sock_fd, SIOCSIFNAME, (caddr_t) &ifr) < 0) {
-	error("Couldn't set interface name %s: %m", ifr.ifr_newname);
-	return 0;
-    }
-
-    /* Get new interface name back */
-    ifr.ifr_ifindex = ifindex;
-    if (ioctl(sock_fd, SIOCGIFNAME, (caddr_t) &ifr) < 0) {
-	error("ioctl (SIOCGIFNAME): %m (line %d)", __LINE__);
-        return 0;
-    }
-
-    strcpy(ifname, ifr.ifr_name);
-    return 1;
 }
 
 /********************************************************************
@@ -2687,6 +2739,7 @@ get_pty(master_fdp, slave_fdp, slave_name, uid)
     }
 #endif /* TIOCGPTN */
 
+#if 0
     if (sfd < 0) {
 	/* the old way - scan through the pty name space */
 	for (i = 0; i < 64; ++i) {
@@ -2705,6 +2758,7 @@ get_pty(master_fdp, slave_fdp, slave_name, uid)
 	    }
 	}
     }
+#endif
 
     if (sfd < 0)
 	return 0;
