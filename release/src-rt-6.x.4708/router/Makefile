@@ -1332,6 +1332,11 @@ pppd-install: pppd
 	$(STRIP) $(INSTALLDIR)/pppd/usr/sbin/pppd
 	install -D pppd/chat/chat $(INSTALLDIR)/pppd/usr/sbin/chat
 	$(STRIP) $(INSTALLDIR)/pppd/usr/sbin/chat
+	install -D pppd/pppdump/pppdump $(INSTALLDIR)/pppd/usr/sbin/pppdump
+	$(STRIP) $(INSTALLDIR)/pppd/usr/sbin/pppdump
+	install -D pppd/pppstats/pppstats $(INSTALLDIR)/pppd/usr/sbin/pppstats
+	$(STRIP) $(INSTALLDIR)/pppd/usr/sbin/pppstats
+	install -D pppd/pppd/plugins/pppoatm/pppoatm.so   $(INSTALLDIR)/pppd/usr/lib/pppd/pppoatm.so
 ifeq ($(TCONFIG_L2TP),y)
 	install -D pppd/pppd/plugins/pppol2tp/pppol2tp.so $(INSTALLDIR)/pppd/usr/lib/pppd/pppol2tp.so
 	$(STRIP) $(INSTALLDIR)/pppd/usr/lib/pppd/*.so
