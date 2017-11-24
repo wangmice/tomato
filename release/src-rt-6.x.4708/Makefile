@@ -37,7 +37,7 @@ export PATH := $(RELEASEDIR)/tools:$(SRCBASE)/ctools:$(SRCBASE)/toolchains/hndto
 
 include ./target.mak
 
-export LD_LIBRARY_PATH := /opt/hndtools-arm-linux-2.6.36-uclibc-4.5.3/lib
+export LD_LIBRARY_PATH := $(SRCBASE)/toolchains/hndtools-arm-linux-2.6.36-uclibc-4.5.3/lib
 
 CTAGS_EXCLUDE_OPT := --exclude=kernel_header --exclude=$(PLATFORM)
 CTAGS_DEFAULT_DIRS := $(SRCBASE)/router/rc $(SRCBASE)/router/httpd $(SRCBASE)/src/router/shared $(SRCBASE)/src/router/www

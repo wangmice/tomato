@@ -2545,7 +2545,7 @@ libnfsidmap-install: libnfsidmap
 	$(MAKE) -C libnfsidmap DESTDIR=$(TOP)/libnfsidmap/staged install
 
 portmap/stamp-h1:
-	cd portmap \
+	#cd portmap \
 	CFLAGS="-Os -Wall $(EXTRACFLAGS)" \
 	$(MAKE) -C portmap CC=$(CC) AR=$(AR) LD=$(LD) RANLIB=$(RANLIB) RPCUSER="nobody"
 	touch portmap/stamp-h1
@@ -2665,7 +2665,7 @@ tinc-install:
 	$(STRIP) $(INSTALLDIR)/tinc/usr/sbin/tincd
 
 sd-idle/stamp-h1:
-	cd sd-idle \
+	#cd sd-idle \
 	CFLAGS="-Os -Wall --host=$(HOST) --target=$(HOST) $(EXTRACFLAGS)" \
 	$(MAKE) -C sd-idle
 	chmod 0755 sd-idle/sd-idle
