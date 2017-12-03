@@ -2617,6 +2617,7 @@ nfs-utils-clean:
 nfs-utils-install: nfs-utils
 	install -d $(INSTALLDIR)/nfs-utils/usr/sbin
 	install -D nfs-utils/utils/mount/mount.nfs $(INSTALLDIR)/nfs-utils/usr/sbin/mount.nfs
+	ln -sf mount.nfs $(INSTALLDIR)/nfs-utils/usr/sbin/mount.nfs4
 	install -D nfs-utils/utils/nfsd/nfsd $(INSTALLDIR)/nfs-utils/usr/sbin/nfsd
 	install -D nfs-utils/utils/showmount/showmount $(INSTALLDIR)/nfs-utils/usr/sbin/showmount
 	install -D nfs-utils/utils/exportfs/exportfs $(INSTALLDIR)/nfs-utils/usr/sbin/exportfs
