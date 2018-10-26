@@ -5,7 +5,7 @@
  *             packet encryption, packet authentication, and
  *             packet compression.
  *
- *  Copyright (C) 2002-2017 OpenVPN Technologies, Inc. <sales@openvpn.net>
+ *  Copyright (C) 2002-2018 OpenVPN Inc <sales@openvpn.net>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2
@@ -16,16 +16,47 @@
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with this program (see the file COPYING included with this
- *  distribution); if not, write to the Free Software Foundation, Inc.,
- *  59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ *  You should have received a copy of the GNU General Public License along
+ *  with this program; if not, write to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
 #ifndef STATUS_H
 #define STATUS_H
 
 #include "interval.h"
+
+//Sam.B	2013/10/31
+#define TYPEDEF_BOOL	//will skip in typedefs.h
+#include <unistd.h>
+#include <bcmnvram.h>
+#include "shared.h"
+
+#define EXIT_GOOD		0
+#define EXIT_ERROR		1
+#define ADDR_CONFLICTED		2
+#define ROUTE_CONFLICTED	3
+#define RUNNING			4
+#define SSLPARAM_ERROR	5
+#define SSLPARAM_DH_ERROR	6
+#define RCV_AUTH_FAILED_ERROR	7
+
+#define ST_EXIT			0
+#define ST_INIT			1
+#define ST_RUNNING		2
+#define ST_ERROR		-1
+
+#define ERRNO_DEFAULT		0
+#define ERRNO_IP		1
+#define ERRNO_ROUTE		2
+#define ERRNO_SSL		4
+#define ERRNO_DH		5
+#define ERRNO_AUTH		6
+
+void update_nvram_status(int flag);
+int current_addr(in_addr_t addr);
+int current_route(in_addr_t network, in_addr_t netmask);
+//Sam.E	2013/10/31
 
 /*
  * virtual function interface for status output

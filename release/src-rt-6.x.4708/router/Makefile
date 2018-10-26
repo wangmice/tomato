@@ -2328,13 +2328,14 @@ lzo-install: lzo
 		ln -sf liblzo2.so.2.0.0 liblzo2.so
 
 openvpn/.conf: openssl lzo
-	cd openvpn && autoreconf && \
+	cd openvpn && ./autogen.sh && \
 	CFLAGS="-O3 -Wall $(EXTRACFLAGS) -ffunction-sections -fdata-sections" \
 	LDFLAGS="-L$(TOP)/openssl -L$(TOP)/lzo/src/.libs -ffunction-sections -fdata-sections -Wl,--gc-sections" \
 	CPPFLAGS="-I$(TOP)/lzo/include -I$(TOP)/openssl/include" \
 	$(CONFIGURE) --prefix= \
 	--with-crypto-library=openssl \
 	--disable-debug --disable-plugin-auth-pam --disable-plugin-down-root --with-plugindir=/lib --enable-management --disable-small \
+	--enable-iproute2 \
 	--disable-selinux --disable-socks \
 	OPENSSL_SSL_CFLAGS="-I$(TOP)/openssl/include" \
 	OPENSSL_SSL_LIBS="-L$(TOP)/openssl -lssl" \

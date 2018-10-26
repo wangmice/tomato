@@ -5,7 +5,7 @@
  *             packet encryption, packet authentication, and
  *             packet compression.
  *
- *  Copyright (C) 2002-2017 OpenVPN Technologies, Inc. <sales@openvpn.net>
+ *  Copyright (C) 2002-2018 OpenVPN Inc <sales@openvpn.net>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2
@@ -16,10 +16,9 @@
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with this program (see the file COPYING included with this
- *  distribution); if not, write to the Free Software Foundation, Inc.,
- *  59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ *  You should have received a copy of the GNU General Public License along
+ *  with this program; if not, write to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
 #ifndef ERROR_H
@@ -98,6 +97,11 @@ extern int x_msg_line_num;
 #define M_DEBUG           (1<<7)
 
 #define M_ERRNO           (1<<8)         /* show errno description */
+
+#ifdef ENABLE_CRYPTO_OPENSSL
+#  define M_SSL_DH          (1<<9)
+#  define M_SSL             (1<<10)      /* show SSL error */
+#endif
 
 #define M_NOMUTE          (1<<11)        /* don't do mute processing */
 #define M_NOPREFIX        (1<<12)        /* don't show date/time prefix */
@@ -262,7 +266,7 @@ void msg_forked(void);
 
 void open_syslog(const char *pgmname, bool stdio_to_null);
 
-void close_syslog();
+void close_syslog(void);
 
 /* log file output */
 void redirect_stdout_stderr(const char *file, bool append);
