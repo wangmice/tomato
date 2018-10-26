@@ -869,14 +869,14 @@ openssl/stamp-h1:
 	cd openssl && \
 	./Configure $(HOSTCONFIG) --openssldir=/etc --cross-compile-prefix=' ' \
 	-ffunction-sections -fdata-sections -Wl,--gc-sections \
-	shared $(OPENSSL_CIPHERS) \
-	no-sha0 no-smime no-camellia no-krb5 no-rmd160 no-ripemd \
-	no-seed no-capieng no-gms no-gmp no-rfc3779 \
-	no-err no-hw no-jpake \
-	no-zlib no-engines no-sse2 no-libunbound no-ssl-trace \
-	no-dtls1 no-store no-psk no-md2 no-mdc2 no-ts
+	shared $(OPENSSL_CIPHERS) 
+	# no-sha0 no-smime no-camellia no-krb5 no-rmd160 no-ripemd \
+	# no-seed no-capieng no-gms no-gmp no-rfc3779 \
+	# no-err no-hw no-jpake \
+	# no-zlib no-engines no-sse2 no-libunbound no-ssl-trace \
+	# no-dtls1 no-store no-psk no-md2 no-mdc2 no-ts
 
-	@$(MAKE) -C openssl clean
+	@$(MAKE) -C openssl clean depend
 	@touch openssl/stamp-h1
 
 openssl: openssl/stamp-h1
@@ -2328,18 +2328,20 @@ lzo-install: lzo
 		ln -sf liblzo2.so.2.0.0 liblzo2.so
 
 openvpn/.conf: openssl lzo
-	cd openvpn && ./autogen.sh && \
-	CFLAGS="-O3 -Wall $(EXTRACFLAGS) -ffunction-sections -fdata-sections" \
-	LDFLAGS="-L$(TOP)/openssl -L$(TOP)/lzo/src/.libs -ffunction-sections -fdata-sections -Wl,--gc-sections" \
-	CPPFLAGS="-I$(TOP)/lzo/include -I$(TOP)/openssl/include" \
-	$(CONFIGURE) --prefix= \
+	cd openvpn && aclocal -I m4;libtoolize --copy --force;autoheader;automake -a -c --foreign;autoconf  && \
+	CFLAGS="-O3 -Wall $(EXTRACFLAGS) -ffunction-sections -fdata-sections $(if $(TCONFIG_HTTPS),-I$(TOP)/openssl/include/openssl)" \
+	LDFLAGS="-L$(TOP)/openssl -L$(TOP)/lzo/src/.libs -ffunction-sections -fdata-sections -Wl,--gc-sections  $(if $(TCONFIG_HTTPS),-L$(TOP)/openssl -lcrypto -lssl)" \
+	CPPFLAGS="-I$(TOP)/lzo/include -I$(TOP)/openssl/include -I$(TOP)/shared -I$(SRCBASE)/include" \
+	OPENSSL_CRYPTO_CFLAGS="-I$(TOP)/openssl" \
+	OPENSSL_CRYPTO_LIBS="-L$(TOP)/openssl -lcrypto" \
+	OPENSSL_SSL_CFLAGS="-I$(TOP)/openssl/include" \
+	OPENSSL_SSL_LIBS="-L$(TOP)/openssl -lssl" \
+	ac_cv_lib_resolv_gethostbyname=no \
+	$(CONFIGURE) --prefix="" \
 	--with-crypto-library=openssl \
 	--disable-debug --disable-plugin-auth-pam --disable-plugin-down-root --with-plugindir=/lib --enable-management --disable-small \
 	--enable-iproute2 \
-	--disable-selinux --disable-socks \
-	OPENSSL_SSL_CFLAGS="-I$(TOP)/openssl/include" \
-	OPENSSL_SSL_LIBS="-L$(TOP)/openssl -lssl" \
-	ac_cv_lib_resolv_gethostbyname=no
+	--disable-selinux --disable-socks
 	touch openvpn/.conf
 
 openvpn: openvpn/.conf
@@ -2754,7 +2756,7 @@ libsodium-clean:
 
 dnscrypt/stamp-h1: libsodium
 	cd $(TOP)/dnscrypt && CC=$(CC) STRIP=$(STRIP) \
-	autoreconf -fsi && \
+	autoreconf -fi && \
 	CFLAGS="-Os -Wall $(EXTRACFLAGS) -ffunction-sections -fdata-sections" \
 	CPPFLAGS="-I$(TOP)/libsodium/src/libsodium/include" \
 	LDFLAGS="-ffunction-sections -fdata-sections -Wl,--gc-sections -L$(TOP)/libsodium/src/libsodium/.libs" \
