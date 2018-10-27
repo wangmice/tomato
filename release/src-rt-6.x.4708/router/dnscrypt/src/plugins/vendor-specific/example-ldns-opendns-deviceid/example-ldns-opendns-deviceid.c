@@ -19,7 +19,7 @@ DCPLUGIN_MAIN(__FILE__);
 const char *
 dcplugin_description(DCPlugin * const dcplugin)
 {
-    return "Add an OpenDNS device identifier to outgoing queries";
+    return "Add a Cisco Umbrella device identifier to outgoing queries";
 }
 
 const char *
@@ -27,9 +27,9 @@ dcplugin_long_description(DCPlugin * const dcplugin)
 {
     return
         "This plugin tags outgoing packets with the 8 bytes password,\n"
-        "that the OpenDNS Umbrella service uses to identify their users.\n"
+        "that the Cisco Umbrella service uses to identify their users.\n"
         "\n"
-        "If you happen to have an OpenDNS VPN or Umbrella account,\n"
+        "If you happen to have an OpenDNS VPN or Cisco Umbrella account,\n"
         "your password ('device') can be displayed with:\n"
         "\n"
         "$ dig txt debug.opendns.com.\n"
@@ -55,6 +55,7 @@ load_device_id_from_file(const char * const file_name)
     }
     if (fread(device_id, 1U, sizeof EDNS_DEV_ID, fp) !=
         sizeof EDNS_DEV_ID) {
+        fclose(fp);
         free(device_id);
         return NULL;
     }

@@ -88,7 +88,11 @@ static const char *getopt_options = "a:e:EhIk:K:L:l:m:n:r:R:t:u:N:TVX:";
 static void
 options_version(void)
 {
+#ifdef PACKAGE_VENDOR
+    puts(PACKAGE_STRING "-" PACKAGE_VENDOR);
+#else
     puts(PACKAGE_STRING);
+#endif
     puts("");
     printf("Compilation date: %s\n", __DATE__);
 #ifdef PLUGINS
@@ -266,7 +270,7 @@ options_parse_candidate(ProxyContext * const proxy_context,
     }
     resolver_ip = options_get_col(headers, headers_count,
                                   cols, cols_count, "Resolver address");
-    if (*resolver_ip == '[') {
+    if (resolver_ip == NULL || *resolver_ip == '[') {
         return 0;
     }
     (*candidate_count_p)++;

@@ -1,5 +1,5 @@
 AC_PREREQ([2.65])
-AC_INIT([dnscrypt-proxy],[1.9.4],[https://dnscrypt.org])
+AC_INIT([dnscrypt-proxy],[1.9.5],[https://dnscrypt.org])
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_AUX_DIR([libltdl/config])
 AC_CONFIG_SRCDIR([src/proxy/app.c])
@@ -401,16 +401,19 @@ dnl Checks for library functions.
 
 AC_SEARCH_LIBS(pow, [m])
 AC_SEARCH_LIBS(dlopen, [dl])
-AC_SEARCH_LIBS(clock_gettime, [rt],
-  [AC_DEFINE(HAVE_CLOCK_GETTIME,[1],[define if you have clock_gettime()])])
+
+AS_IF([test "$host_vendor" = "apple"], [],[
+  AC_SEARCH_LIBS(clock_gettime, [rt],
+    [AC_DEFINE(HAVE_CLOCK_GETTIME,[1],[define if you have clock_gettime()])])
+])
 
 AC_SEARCH_LIBS(backtrace, [execinfo],
   [AC_DEFINE(HAVE_BACKTRACE,[1],[define if you have backtrace()])])
 
-AC_SEARCH_LIBS(gethostbyname, [resolv nsl])
+AC_SEARCH_LIBS(gethostbyname, [resolv nsl ws2_32])
 AC_SEARCH_LIBS(recvfrom, [socket])
 AC_SEARCH_LIBS(kvm_open, [kvm])
-AC_SEARCH_LIBS(sodium_hex2bin, [sodium], [ ], AC_ERROR([libsodium >= 0.7.0 not found]))
+AC_SEARCH_LIBS(sodium_hex2bin, [sodium], [ ], AC_ERROR([libsodium >= 1.0.0 not found]))
 
 use_ldns=no
 AC_CHECK_HEADER([ldns/ldns.h], [
@@ -431,10 +434,24 @@ AM_CONDITIONAL(USE_LDNS, test x$use_ldns = xyes)
 AC_SUBST([LDNS_LIBS])
 
 case $host_os in
-  cygwin* | mingw* | pw32* | cegcc*)
+  cygwin* | pw32* | cegcc*)
     AC_CHECK_LIB([ws2_32], [_head_libws2_32_a])
     AC_CHECK_LIB([psapi], [_head_libpsapi_a])
     AC_CHECK_LIB([iphlpapi], [_head_libiphlpapi_a])
+  ;;
+  mingw*)
+    case $host_cpu in
+      amd64|x86_64)
+        AC_CHECK_LIB([ws2_32], [_head_lib64_libws2_32_a])
+        AC_CHECK_LIB([psapi], [_head_lib64_libpsapi_a])
+        AC_CHECK_LIB([iphlpapi], [_head_lib64_libiphlpapi_a])
+      ;;
+      *)
+        AC_CHECK_LIB([ws2_32], [__head_lib32_libws2_32_a])
+        AC_CHECK_LIB([psapi], [_head_lib32_libpsapi_a])
+        AC_CHECK_LIB([iphlpapi], [_head_lib32_libiphlpapi_a])
+      ;;
+    esac
   ;;
 esac
 

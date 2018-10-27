@@ -114,7 +114,11 @@ dnl Checks for libraries.
 AC_SEARCH_LIBS([inet_ntoa], [nsl])
 AC_SEARCH_LIBS([socket], [socket])
 AC_SEARCH_LIBS([inet_aton], [resolv])
-AC_SEARCH_LIBS([clock_gettime], [rt])
+
+AS_IF([test "$host_vendor" = "apple"], [],[
+  AC_SEARCH_LIBS([clock_gettime], [rt])
+])
+
 AC_SEARCH_LIBS([sendfile], [sendfile])
 
 dnl - check if the macro WIN32 is defined on this compiler.
@@ -291,7 +295,7 @@ AC_C_INLINE
 AC_HEADER_TIME
 
 dnl Checks for library functions.
-AC_CHECK_FUNCS([gettimeofday vasprintf fcntl clock_gettime strtok_r strsep])
+AC_CHECK_FUNCS([gettimeofday vasprintf fcntl strtok_r strsep])
 AC_CHECK_FUNCS([getnameinfo strlcpy inet_ntop inet_pton signal sigaction strtoll inet_aton pipe eventfd sendfile mmap splice arc4random arc4random_buf arc4random_addrandom issetugid geteuid getegid getprotobynumber setenv unsetenv putenv sysctl])
 AC_CHECK_FUNCS([umask])
 
@@ -303,6 +307,9 @@ AC_CACHE_CHECK(
 	    [[
 		#ifdef HAVE_NETDB_H
 		#include <netdb.h>
+		#elif (defined(WIN32_WINNT) && (WIN32_WINNT >= 0x0600)) || (defined(_WIN32_WINNT) && (_WIN32_WINNT >= 0x0600))
+		#include <winsock2.h>
+		#include <ws2tcpip.h>
 		#endif
 	    ]],
 	    [[
@@ -578,8 +585,12 @@ AC_CHECK_TYPES([struct in6_addr, struct sockaddr_in6, sa_family_t, struct addrin
 #include <netdb.h>
 #endif
 #ifdef WIN32
+#ifndef WIN32_WINNT
 #define WIN32_WINNT 0x400
+#endif
+#ifndef _WIN32_WINNT
 #define _WIN32_WINNT 0x400
+#endif
 #define WIN32_LEAN_AND_MEAN
 #if defined(_MSC_VER) && (_MSC_VER < 1300)
 #include <winsock.h>
@@ -601,8 +612,12 @@ AC_CHECK_MEMBERS([struct in6_addr.s6_addr32, struct in6_addr.s6_addr16, struct s
 #include <sys/socket.h>
 #endif
 #ifdef WIN32
+#ifndef WIN32_WINNT
 #define WIN32_WINNT 0x400
+#endif
+#ifndef _WIN32_WINNT
 #define _WIN32_WINNT 0x400
+#endif
 #define WIN32_LEAN_AND_MEAN
 #if defined(_MSC_VER) && (_MSC_VER < 1300)
 #include <winsock.h>
