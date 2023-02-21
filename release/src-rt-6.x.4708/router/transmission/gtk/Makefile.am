@@ -95,7 +95,7 @@ transmission_gtk_LDADD = \
 
 DESKTOP_IN_FILES=transmission-gtk.desktop.in
 DESKTOP_FILES=$(DESKTOP_IN_FILES:.desktop.in=.desktop)
-@INTLTOOL_DESKTOP_RULE@
+# @INTLTOOL_DESKTOP_RULE@
 
 Productivitydir = $(datadir)/applications
 Productivity_DATA = $(DESKTOP_FILES)

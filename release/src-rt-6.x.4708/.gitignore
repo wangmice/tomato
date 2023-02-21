@@ -1,0 +1,13 @@
+*.log
+btools/fpkg
+ctools/piggy
+ctools/target.squashfs
+ctools/trx_asus
+ctools/vmlinuz-lzma
+image/
+linux/linux-2.6.36/config_e
+linux/linux-2.6.36/user_headers/
+router/.config
+router/.gitignore
+tomato_profile.mak
+

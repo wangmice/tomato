@@ -1109,7 +1109,7 @@ libnfnetlink/stamp-h1:
 # tomatoraf.com, Victek
 # last sources is dated March 22,2014 from netfilter.org git
 # ./genconfig.sh and make with automake 1.13
-	cd $(TOP)/libnfnetlink && CC=$(CC) STRIP=$(STRIP) \
+	cd $(TOP)/libnfnetlink && CC=$(CC) STRIP="$(STRIP)" \
 		CFLAGS="-Os -Wall $(EXTRACFLAGS) -ffunction-sections -fdata-sections" \
 		LDFLAGS="-ffunction-sections -fdata-sections -Wl,--gc-sections" \
 		$(CONFIGURE) --prefix=/usr --enable-shared --enable-static
@@ -1366,9 +1366,9 @@ libpcap-install: libpcap
 	cd $(INSTALLDIR)/libpcap/usr/lib && \
 		ln -sf libpcap.so.1.8.1 libpcap.so.1 && ln -sf libpcap.so.1.8.1 libpcap.so
 
-#	ipupdate-install:
-#		install -D ipupdate/ez-ipupdate $(INSTALLDIR)/ipupdate/usr/sbin/ez-ipupdate
-#		$(STRIP) $(INSTALLDIR)/ipupdate/usr/sbin/ez-ipupdate
+# ipupdate-install:
+# 	install -D ipupdate/ez-ipupdate $(INSTALLDIR)/ipupdate/usr/sbin/ez-ipupdate
+# 	$(STRIP) $(INSTALLDIR)/ipupdate/usr/sbin/ez-ipupdate
 
 zebra/stamp-h1:
 	@cd zebra && rm -f config.cache && \
@@ -1952,7 +1952,7 @@ pcre/stamp-h1:
 	$(SEP)
 	cd pcre && \
 	CC=$(CC) CXX=$(HOST)-g++ AR=$(AR) RANLIB=$(RANLIB) LD=$(LD) CFLAGS="-Os -Wall $(EXTRACFLAGS)" \
-	autoreconf ; \
+	autoreconf -fi; \
 	$(CONFIGURE) --prefix=/usr --disable-dependency-tracking --enable-utf8 --enable-unicode-properties --disable-cpp
 	@touch pcre/stamp-h1
 	[ -d pcre/m4 ] || mkdir pcre/m4
@@ -2473,7 +2473,7 @@ libiconv-install: libiconv
 
 transmission/stamp-h1: openssl libcurl libevent zlib
 	cd transmission && CC=$(CC) STRIP=$(STRIP) \
-		autoreconf && \
+		autoreconf -fi && \
 		CFLAGS="-Os -Wall -fno-delete-null-pointer-checks -funit-at-a-time \
 			--param large-function-growth=800 --param max-inline-insns-single=3000 \
 			-ffunction-sections -fdata-sections" \
@@ -2779,7 +2779,7 @@ dnscrypt-clean:
 
 tor/stamp-h1: openssl zlib libevent
 	cd $(TOP)/tor && CC=$(CC) STRIP=$(STRIP) \
-	autoreconf && \
+	autoreconf -fi && \
 	CFLAGS="-O2 -Wall $(EXTRACFLAGS)" \
 	$(CONFIGURE) --prefix=/usr --with-libevent-dir=$(TOP)/libevent/staged/usr/local \
 		--with-openssl-dir=$(TOP)/openssl --with-zlib-dir=$(TOP)/zlib \

@@ -247,7 +247,7 @@ createFieldTable('', [
 		['NOVT-6NOVST,M3.5.0,M10.5.0/3','UTC+06:00 Russia, Novosibirsk'],
 		['UTC-7','UTC+07:00 Thailand'],
 		['KRAT-7KRAST,M3.5.0,M10.5.0/3','UTC+07:00 Russia, Krasnoyarsk'],
-		['UTC-8','UTC+08:00 China, Hong Kong, Western Australia, Singapore, Taiwan'],
+		['CST-8','UTC+08:00 China, Hong Kong, Western Australia, Singapore, Taiwan'],
 		['IRKT-8IRKST,M3.5.0,M10.5.0/3','UTC+08:00 Russia, Irkutsk'],
 		['UTC-9','UTC+09:00 Japan, Korea'],
 		['YAKT-9YAKST,M3.5.0,M10.5.0/3','UTC+09:00 Russia, Yakutsk'],
