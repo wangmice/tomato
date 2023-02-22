@@ -1,52 +1,82 @@
+image:
+    - Visual Studio 2017
+
 platform:
-    - x86
     - x64
+    - x86
 
 environment:
+    fast_finish: true
     matrix:
-        - VSVER: 9
-        - VSVER: 10
-        - VSVER: 11
-        - VSVER: 12
-        - VSVER: 14
+        - VSVER: 15
 
 configuration:
-    - plain
     - shared
+    - minimal
 
-matrix:
-    allow_failures:
-        - platform: x64
-          VSVER: 9
-        - platform: x64
-          VSVER: 10
-        - platform: x64
-          VSVER: 11
+for:
+    -
+        branches:
+            only:
+                - master
+        configuration:
+            - shared
+            - plain
+            - minimal
 
 before_build:
     - ps: >-
+        Install-Module VSSetup -Scope CurrentUser
+    - ps: >-
+        Get-VSSetupInstance -All
+    - ps: >-
         If ($env:Platform -Match "x86") {
             $env:VCVARS_PLATFORM="x86"
-            $env:TARGET="VC-WIN32"
-            $env:DO="do_ms"
+            $env:TARGET="VC-WIN32 no-asm --strict-warnings"
         } Else {
             $env:VCVARS_PLATFORM="amd64"
-            $env:TARGET="VC-WIN64A"
-            $env:DO="do_win64a"
+            $env:TARGET="VC-WIN64A-masm"
         }
     - ps: >-
-        If ($env:Configuration -Like "*shared*") {
-            $env:MAK="ntdll.mak"
+        If ($env:Configuration -Match "shared") {
+            $env:CONFIG_OPTS="enable-fips"
+        } ElseIf ($env:Configuration -Match "minimal") {
+            $env:CONFIG_OPTS="no-bulk no-asm -DOPENSSL_SMALL_FOOTPRINT"
         } Else {
-            $env:MAK="nt.mak"
+            $env:CONFIG_OPTS="no-fips no-shared"
         }
-    - ps: $env:VSCOMNTOOLS=(Get-Content ("env:VS" + "$env:VSVER" + "0COMNTOOLS"))
-    - call "%VSCOMNTOOLS%\..\..\VC\vcvarsall.bat" %VCVARS_PLATFORM%
-    - perl Configure %TARGET% no-asm
-    - call ms\%DO%
+    - call "C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Auxiliary\Build\vcvarsall.bat" %VCVARS_PLATFORM%
+    - mkdir _build
+    - cd _build
+    - perl ..\Configure %TARGET% no-makedepend %CONFIG_OPTS%
+    - perl configdata.pm --dump
+    - cd ..
+    - ps: >-
+        If ($env:BUILDONLY -or $env:MAKEVERBOSE) {
+            $env:NMAKE="nmake"
+        } Else {
+            $env:NMAKE="nmake /S"
+        }
+    - ps: >-
+        gci env:* | sort-object name
 
 build_script:
-    - nmake /f ms\%MAK%
+    - cd _build
+    - "%NMAKE% build_all_generated"
+    - "%NMAKE% PERL=no-perl"
+    - cd ..
 
 test_script:
-    - nmake /f ms\%MAK% test
+    - cd _build
+    - ps: >-
+        if ($env:Configuration -Match "plain") {
+            cmd /c "%NMAKE% test VERBOSE_FAILURE=yes 2>&1"
+        } Else {
+            cmd /c "%NMAKE% test VERBOSE_FAILURE=yes TESTS=-test_fuzz 2>&1"
+        }
+    - ps: >-
+        if ($env:Configuration -Match "shared") {
+            mkdir ..\_install
+            cmd /c "%NMAKE% install DESTDIR=..\_install 2>&1"
+        }
+    - cd ..
