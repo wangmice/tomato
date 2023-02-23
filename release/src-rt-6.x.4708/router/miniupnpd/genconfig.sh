@@ -368,10 +368,12 @@ esac
 
 # UUID API
 if grep uuid_create /usr/include/uuid.h > /dev/null 2>&1 ; then
-	echo "#define BSD_UUID" >> ${CONFIGFILE}
+	# echo "#define BSD_UUID" >> ${CONFIGFILE}
+  echo "wangmice: no uuid"
 fi
 if grep uuid_generate /usr/include/uuid/uuid.h > /dev/null 2>&1 ; then
-	echo "#define LIB_UUID" >> ${CONFIGFILE}
+	  # echo "#define LIB_UUID" >> ${CONFIGFILE}
+    echo "wangmice: no uuid"
 fi
 
 # set V6SOCKETS_ARE_V6ONLY to 0 if it was not set above

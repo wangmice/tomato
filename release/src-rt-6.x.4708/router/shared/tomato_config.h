@@ -142,6 +142,9 @@
 #undef TCONFIG_REMOVE_USBAPP
   #define IF_TCONFIG_REMOVE_USBAPP(...)
   #define IF_NOT_TCONFIG_REMOVE_USBAPP(...) __VA_ARGS__
+#define TCONFIG_AIO 1
+  #define IF_TCONFIG_AIO(...) __VA_ARGS__
+  #define IF_NOT_TCONFIG_AIO(...)
 #undef TCONFIG_AC66U
   #define IF_TCONFIG_AC66U(...)
   #define IF_NOT_TCONFIG_AC66U(...) __VA_ARGS__
@@ -157,9 +160,9 @@
 #undef TCONFIG_UFSDN
   #define IF_TCONFIG_UFSDN(...)
   #define IF_NOT_TCONFIG_UFSDN(...) __VA_ARGS__
-#undef TCONFIG_TUXERA
-  #define IF_TCONFIG_TUXERA(...)
-  #define IF_NOT_TCONFIG_TUXERA(...) __VA_ARGS__
+#define TCONFIG_TUXERA 1
+  #define IF_TCONFIG_TUXERA(...) __VA_ARGS__
+  #define IF_NOT_TCONFIG_TUXERA(...)
 #define TCONFIG_BCMARM 1
   #define IF_TCONFIG_BCMARM(...) __VA_ARGS__
   #define IF_NOT_TCONFIG_BCMARM(...)

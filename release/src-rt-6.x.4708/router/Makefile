@@ -888,9 +888,9 @@ openssl-clean:
 	@rm -f openssl/stamp-h1
 
 openssl-install: openssl
-	install -D openssl/libcrypto.so.1.0.0 $(INSTALLDIR)/openssl/usr/lib/libcrypto.so.1.0.0
-	$(STRIP) $(INSTALLDIR)/openssl/usr/lib/libcrypto.so.1.0.0
-	cd $(INSTALLDIR)/openssl/usr/lib && ln -sf libcrypto.so.1.0.0 libcrypto.so
+	install -D openssl/libcrypto.so.3 $(INSTALLDIR)/openssl/usr/lib/libcrypto.so.3
+	$(STRIP) $(INSTALLDIR)/openssl/usr/lib/libcrypto.so.3
+	cd $(INSTALLDIR)/openssl/usr/lib && ln -sf libcrypto.so.3 libcrypto.so
 
 	install -D openssl/apps/openssl $(INSTALLDIR)/openssl/usr/sbin/openssl
 	$(STRIP) $(INSTALLDIR)/openssl/usr/sbin/openssl
@@ -902,9 +902,9 @@ openssl-install: openssl
 #	chmod 0500 $(INSTALLDIR)/openssl/usr/sbin/gencert.sh
 
 #ifeq ($(FULL_OPENSSL),y)
-	install -D openssl/libssl.so.1.0.0 $(INSTALLDIR)/openssl/usr/lib/libssl.so.1.0.0
-	$(STRIP) $(INSTALLDIR)/openssl/usr/lib/libssl.so.1.0.0
-	cd $(INSTALLDIR)/openssl/usr/lib && ln -sf libssl.so.1.0.0 libssl.so
+	install -D openssl/libssl.so.3 $(INSTALLDIR)/openssl/usr/lib/libssl.so.3
+	$(STRIP) $(INSTALLDIR)/openssl/usr/lib/libssl.so.3
+	cd $(INSTALLDIR)/openssl/usr/lib && ln -sf libssl.so.3 libssl.so
 #endif
 
 mssl:	openssl
@@ -2035,7 +2035,7 @@ php/stamp-h1: pcre zlib libiconv sqlite libxml2 libpng jpeg libcurl
 		-L$(TOP)/libpng/.libs -L$(TOP)/libcurl/staged/lib" \
 	CPPFLAGS="-L$(TOP)/pcre/.libs -L$(TOP)/sqlite/.libs -L$(TOP)/zlib -L$(TOP)/libxml2/.libs -L$(TOP)/libiconv/lib/.libs -L$(TOP)/libpng/.libs" \
 	LIBS="-L$(TOP)/pcre/.libs -L$(TOP)/sqlite/.libs -L$(TOP)/zlib -L$(TOP)/libxml2/.libs -L$(TOP)/libiconv/lib/.libs -L$(TOP)/libpng/.libs -lz \
-		-lsqlite3 -ldl -lpthread -liconv -lxml2 -lstdc++ -lcurl" \
+		-lsqlite3 -ldl -lpthread -liconv -lxml2 -lstdc++ -lcurl -L$(TOP)/openssl -lcrypto -lssl" \
 	PHP_FCGI_LIBXML_DIR="$(TOP)/libxml2/staged/usr" \
 	YACC=/usr/local/bin/yacc-2.7 \
 	ac_cv_func_memcmp_working=yes \
@@ -2389,15 +2389,16 @@ CACERT:=
 endif
 
 libcurl/stamp-h1: zlib openssl
-	cd libcurl && CC=$(CC) STRIP=$(STRIP) \
-		CPPFLAGS="-Os -Wall $(EXTRACFLAGS) -ffunction-sections -fdata-sections -I$(TOP)/zlib" \
-		LDFLAGS="-L$(TOP)/zlib -ffunction-sections -fdata-sections -Wl,--gc-sections -fPIC" \
+	cd libcurl && CC=$(CC) STRIP=$(STRIP) && autoreconf -fi && \
+     CC=$(CC) STRIP=$(STRIP) \
+		CPPFLAGS="-Os -Wall $(EXTRACFLAGS) -ffunction-sections -fdata-sections -I$(TOP)/zlib -L$(TOP)/openssl -lcrypto -lssl" \
+		LDFLAGS="-L$(TOP)/zlib -ffunction-sections -fdata-sections -Wl,--gc-sections -fPIC -L$(TOP)/openssl -lcrypto -lssl" \
 		$(CONFIGURE) --prefix=$(TOP)/libcurl/staged --disable-thread --enable-shared --enable-static \
 		--enable-ares --enable-cookies --enable-crypto-auth --enable-nonblocking \
 		--enable-file --enable-ftp --enable-http --enable-ipv6 --enable-tftp \
 		--disable-nls --disable-ares --disable-dict --disable-debug --disable-gopher \
 		--disable-ldap --disable-manual --disable-telnet --disable-verbose \
-		--with-random="/dev/urandom" --with-ssl="$(TOP)/openssl/ssl" \
+		--with-random="/dev/urandom" --with-openssl="$(TOP)/openssl" \
 		--without-gnutls --without-krb4 --without-libidn \
 		--with-linux-headers=$(LINUXDIR)/include $(CACERT) \
 		OPENSSL_CFLAGS="-I$(TOP)/openssl/include" \
@@ -2418,11 +2419,11 @@ libcurl-install: libcurl
 	install -D libcurl/src/.libs/curl $(INSTALLDIR)/libcurl/usr/sbin/curl
 	$(STRIP) -s $(INSTALLDIR)/libcurl/usr/sbin/curl
 	install -d $(INSTALLDIR)/libcurl/usr/lib
-	install -D libcurl/lib/.libs/libcurl.so.4.4.0 $(INSTALLDIR)/libcurl/usr/lib/libcurl.so.4.4.0
-	$(STRIP) -s $(INSTALLDIR)/libcurl/usr/lib/libcurl.so.4.4.0
+	install -D libcurl/lib/.libs/libcurl.so.4.8.0 $(INSTALLDIR)/libcurl/usr/lib/libcurl.so.4.8.0
+	$(STRIP) -s $(INSTALLDIR)/libcurl/usr/lib/libcurl.so.4.8.0
 	cd $(INSTALLDIR)/libcurl/usr/lib/ && \
-		ln -sf libcurl.so.4.4.0 libcurl.so.4 && \
-		ln -sf libcurl.so.4.4.0 libcurl.so
+		ln -sf libcurl.so.4.8.0 libcurl.so.4 && \
+		ln -sf libcurl.so.4.8.0 libcurl.so
 
 libevent/stamp-h1:
 	cd libevent && CC=$(CC) \
@@ -2473,14 +2474,14 @@ libiconv-install: libiconv
 
 transmission/stamp-h1: openssl libcurl libevent zlib
 	cd transmission && CC=$(CC) STRIP=$(STRIP) \
-		autoreconf -fi && \
+		./autogen.sh && autoreconf -fi && \
 		CFLAGS="-Os -Wall -fno-delete-null-pointer-checks -funit-at-a-time \
 			--param large-function-growth=800 --param max-inline-insns-single=3000 \
 			-ffunction-sections -fdata-sections" \
 		LDFLAGS="-ffunction-sections -fdata-sections -Wl,--gc-sections -fPIC \
 			-L$(TOP)/zlib -L$(TOP)/openssl -L$(TOP)/libcurl/lib/.libs -L$(TOP)/libevent/.libs" \
 		HAVE_CXX=yes \
-		$(CONFIGURE) --target=$(HOST) --host=$(HOST) --build=x86_64-linux-gnu --prefix=/usr --disable-nls \
+		$(CONFIGURE) --target=$(HOST) --host=$(HOST) --build=x86_64-linux-gnu --prefix=/usr --disable-nls --disable-dependency-tracking \
 			--enable-lightweight --enable-largefile --enable-utp --without-gtk \
 			LIBCURL_CFLAGS="-I$(TOP)/libcurl/include" \
 			LIBCURL_LDFLAGS="-L$(TOP)/libcurl/lib/.libs/" \
@@ -2777,20 +2778,21 @@ dnscrypt-clean:
 	-@$(MAKE) -C dnscrypt clean
 	@rm -rf dnscrypt/stamp-h1 dnscrypt/src/dnscrypt-proxy/.deps dnscrypt/Makefile
 
-tor/stamp-h1: openssl zlib libevent
+tor/stamp-h1: openssl zlib libevent liblzma
 	cd $(TOP)/tor && CC=$(CC) STRIP=$(STRIP) \
 	autoreconf -fi && \
-	CFLAGS="-O2 -Wall $(EXTRACFLAGS)" \
+	CFLAGS="-O2 -Wall $(EXTRACFLAGS) -ffunction-sections -fdata-sections -flto" \
 	$(CONFIGURE) --prefix=/usr --with-libevent-dir=$(TOP)/libevent/staged/usr/local \
 		--with-openssl-dir=$(TOP)/openssl --with-zlib-dir=$(TOP)/zlib \
-		--disable-asciidoc --disable-tool-name-check --disable-unittests
+		--disable-asciidoc --disable-tool-name-check --disable-unittests \
+    --disable-lzma --disable-zstd
 	touch tor/stamp-h1
 
 tor: tor/stamp-h1
 	$(MAKE) -C tor $(PARALLEL_BUILD)
 
 tor-install: tor
-	install -D tor/src/or/tor $(INSTALLDIR)/tor/usr/sbin/tor
+	install -D tor/src/app/tor $(INSTALLDIR)/tor/usr/sbin/tor
 	$(STRIP) -s $(INSTALLDIR)/tor/usr/sbin/tor
 
 tor-clean:
