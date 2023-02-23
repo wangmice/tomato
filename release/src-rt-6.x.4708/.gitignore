@@ -10,4 +10,6 @@ linux/linux-2.6.36/user_headers/
 router/.config
 router/.gitignore
 tomato_profile.mak
+router/nano/doc/nano.html
+router/zlib/zconf.h
 
