@@ -1,0 +1,15 @@
+[submodule "release/src-rt-6.x.4708/router/libcurl"]
+	path = release/src-rt-6.x.4708/router/libcurl
+	url = https://github.com/curl/curl.git
+[submodule "release/src-rt-6.x.4708/router/transmission"]
+	path = release/src-rt-6.x.4708/router/transmission
+	url = git@github.com:transmission/transmission.git
+[submodule "release/src-rt-6.x.4708/router/openvpn"]
+	path = release/src-rt-6.x.4708/router/openvpn
+	url = ./release/src-rt-6.x.4708/router/openvpn
+[submodule "release/src-rt-6.x.4708/router/tinc"]
+	path = release/src-rt-6.x.4708/router/tinc
+	url = ./release/src-rt-6.x.4708/router/tinc
+[submodule "release/src-rt-6.x.4708/router/tor"]
+	path = release/src-rt-6.x.4708/router/tor
+	url = ./release/src-rt-6.x.4708/router/tor
