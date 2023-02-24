@@ -1880,7 +1880,7 @@ ebtables-clean:
 
 #Roadkill
 spawn-fcgi/stamp-h1:
-	cd spawn-fcgi && autoreconf && CC=$(CC) \
+	cd spawn-fcgi && autoreconf -i && CC=$(CC) \
 	CFLAGS="-Os -Wall $(EXTRACFLAGS) -ffunction-sections -fdata-sections" \
 	LDFLAGS="-ffunction-sections -fdata-sections -Wl,--gc-sections -fPIC" \
 	ac_cv_func_malloc_0_nonnull=yes \
@@ -2529,7 +2529,8 @@ btgui-install: btgui
 libnfsidmap/stamp-h1:
 	cd libnfsidmap && \
 	CFLAGS="-Os -Wall $(EXTRACFLAGS)" \
-	autoreconf -fsi && \
+	autoreconf -fi && \
+  CFLAGS="-Os -Wall $(EXTRACFLAGS)" \
 	ac_cv_func_malloc_0_nonnull=yes \
 	ac_cv_func_realloc_0_nonnull=yes \
 	$(CONFIGURE) --prefix=/usr --enable-shared --enable-static
@@ -2714,7 +2715,7 @@ apcupsd/stamp-h1:
 	cd apcupsd && touch autoconf/variables.mak && CC=$(CC) STRIP=$(STRIP) \
 	$(MAKE) configure && \
 	CFLAGS="-Os -Wall $(EXTRACFLAGS)" \
-	LDFLAGS="-L$(TOOLCHAIN)/lib -ffunction-sections -fdata-sections" \
+	LDFLAGS="-L$(TOOLCHAIN)/lib -ffunction-sections -fdata-sections" topdir="$(TOP)/apcupsd" \
 	$(CONFIGURE) --prefix=/usr --without-x --enable-usb --disable-pcnet --enable-cgi \
 		--disable-lgd --enable-net --sysconfdir=/usr/local/apcupsd --bindir=/bin \
 		--disable-dumb --disable-snmp --disable-net-snmp --with-cgi-bin=/www/apcupsd --with-serial-dev=
