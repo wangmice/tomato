@@ -4,10 +4,10 @@
  *******************************************************************/
 
 #ifndef DROPBEAR_VERSION
-#define DROPBEAR_VERSION "2018.76"
+#define DROPBEAR_VERSION "2022.82"
 #endif
 
-#define LOCAL_IDENT "SSH-2.0-dropbear_" DROPBEAR_VERSION
+#define LOCAL_IDENT "SSH-2.0-dropbear"
 #define PROGNAME "dropbear"
 
 /* Spec recommends after one hour or 1 gigabyte of data. One hour
@@ -27,6 +27,13 @@
 
 #if !(NON_INETD_MODE || INETD_MODE)
 	#error "NON_INETD_MODE or INETD_MODE (or both) must be enabled."
+#endif
+
+/* Would probably work on freebsd but hasn't been tested */
+#if defined(HAVE_FEXECVE) && DROPBEAR_REEXEC && defined(__linux__)
+#define DROPBEAR_DO_REEXEC 1
+#else
+#define DROPBEAR_DO_REEXEC 0
 #endif
 
 /* A client should try and send an initial key exchange packet guessing
@@ -50,7 +57,7 @@
 #define MIN_RSA_KEYLEN 1024
 #endif
 
-#define MAX_BANNER_SIZE 2000 /* this is 25*80 chars, any more is foolish */
+#define MAX_BANNER_SIZE 2050 /* this is 25*80 chars, any more is foolish */
 #define MAX_BANNER_LINES 20 /* How many lines the client will display */
 
 /* the number of NAME=VALUE pairs to malloc for environ, if we don't have
@@ -86,11 +93,24 @@
 /* Required for pubkey auth */
 #define DROPBEAR_SIGNKEY_VERIFY ((DROPBEAR_SVR_PUBKEY_AUTH) || (DROPBEAR_CLIENT))
 
+/* crypt(password) must take less time than the auth failure delay
+   (250ms set in svr-auth.c). On Linux the delay depends on
+   password length, 100 characters here was empirically derived.
+
+   If a longer password is allowed Dropbear cannot compensate
+   for the crypt time which will expose which usernames exist */
+#define DROPBEAR_MAX_PASSWORD_LEN 100
+
 #define SHA1_HASH_SIZE 20
+#define SHA256_HASH_SIZE 32
 #define MD5_HASH_SIZE 16
 #define MAX_HASH_SIZE 64 /* sha512 */
 
+#if DROPBEAR_CHACHA20POLY1305
+#define MAX_KEY_LEN 64 /* 2 x 256 bits for chacha20 */
+#else
 #define MAX_KEY_LEN 32 /* 256 bits for aes256 etc */
+#endif
 #define MAX_IV_LEN 20 /* must be same as max blocksize,  */
 
 #if DROPBEAR_SHA2_512_HMAC
@@ -111,14 +131,6 @@
 #define DROPBEAR_MD5_HMAC 0
 #endif
 
-/* Twofish counter mode is disabled by default because it 
-has not been tested for interoperability with other SSH implementations.
-If you test it please contact the Dropbear author */
-#ifndef DROPBEAR_TWOFISH_CTR
-#define DROPBEAR_TWOFISH_CTR 0
-#endif
-
-
 #define DROPBEAR_ECC ((DROPBEAR_ECDH) || (DROPBEAR_ECDSA))
 
 /* Debian doesn't define this in system headers */
@@ -127,8 +139,8 @@ If you test it please contact the Dropbear author */
 #endif
 
 #define DROPBEAR_ECC_256 (DROPBEAR_ECC)
-#define DROPBEAR_ECC_384 (DROPBEAR_ECC)
-#define DROPBEAR_ECC_521 (DROPBEAR_ECC)
+#define DROPBEAR_ECC_384 1
+#define DROPBEAR_ECC_521 1
 
 #define DROPBEAR_LTC_PRNG (DROPBEAR_ECC)
 
@@ -137,18 +149,33 @@ If you test it please contact the Dropbear author */
  * signing operations slightly slower. */
 #define DROPBEAR_RSA_BLINDING 1
 
+#ifndef DROPBEAR_RSA_SHA1
+#define DROPBEAR_RSA_SHA1 DROPBEAR_RSA
+#endif
+#ifndef DROPBEAR_RSA_SHA256
+#define DROPBEAR_RSA_SHA256 DROPBEAR_RSA
+#endif
+
 /* hashes which will be linked and registered */
-#define DROPBEAR_SHA256 ((DROPBEAR_SHA2_256_HMAC) || (DROPBEAR_ECC_256)  \
- 			|| (DROPBEAR_CURVE25519) || (DROPBEAR_DH_GROUP14_SHA256))
+#define DROPBEAR_SHA1 (DROPBEAR_RSA_SHA1 || DROPBEAR_DSS \
+				|| DROPBEAR_SHA1_HMAC || DROPBEAR_SHA1_96_HMAC \
+				|| DROPBEAR_DH_GROUP1 || DROPBEAR_DH_GROUP14_SHA1 )
+/* sha256 is always used for fingerprints and dbrandom */
+#define DROPBEAR_SHA256 1
 #define DROPBEAR_SHA384 (DROPBEAR_ECC_384)
 /* LTC SHA384 depends on SHA512 */
 #define DROPBEAR_SHA512 ((DROPBEAR_SHA2_512_HMAC) || (DROPBEAR_ECC_521) \
-			|| (DROPBEAR_SHA384) || (DROPBEAR_DH_GROUP16))
+			|| (DROPBEAR_SHA384) || (DROPBEAR_DH_GROUP16) \
+			|| (DROPBEAR_ED25519))
 #define DROPBEAR_MD5 (DROPBEAR_MD5_HMAC)
 
 #define DROPBEAR_DH_GROUP14 ((DROPBEAR_DH_GROUP14_SHA256) || (DROPBEAR_DH_GROUP14_SHA1))
 
 #define DROPBEAR_NORMAL_DH ((DROPBEAR_DH_GROUP1) || (DROPBEAR_DH_GROUP14) || (DROPBEAR_DH_GROUP16))
+
+/* Dropbear only uses server-sig-algs, only needed if we have rsa-sha256 pubkey auth */
+#define DROPBEAR_EXT_INFO ((DROPBEAR_RSA_SHA256) \
+		&& ((DROPBEAR_CLI_PUBKEY_AUTH) || (DROPBEAR_SVR_PUBKEY_AUTH)))
 
 /* roughly 2x 521 bits */
 #define MAX_ECC_SIZE 140
@@ -157,7 +184,7 @@ If you test it please contact the Dropbear author */
 						   explicitly specified for all protocols (just
 						   for algos) but seems valid */
 
-#define MAX_PROPOSED_ALGO 20
+#define MAX_PROPOSED_ALGO 50
 
 /* size/count limits */
 /* From transport rfc */
@@ -171,7 +198,7 @@ If you test it please contact the Dropbear author */
 
 #define RECV_WINDOWEXTEND (opts.recv_window / 3) /* We send a "window extend" every
 								RECV_WINDOWEXTEND bytes */
-#define MAX_RECV_WINDOW (1024*1024) /* 1 MB should be enough */
+#define MAX_RECV_WINDOW (10*1024*1024) /* 10 MB should be enough */
 
 #define MAX_CHANNELS 1000 /* simple mem restriction, includes each tcp/x11
 							connection, so can't be _too_ small */
@@ -184,7 +211,7 @@ If you test it please contact the Dropbear author */
 /* For a 4096 bit DSS key, empirically determined */
 #define MAX_PRIVKEY_SIZE 1700
 
-#define MAX_HOSTKEYS 3
+#define MAX_HOSTKEYS 4
 
 /* The maximum size of the bignum portion of the kexhash buffer */
 /* Sect. 8 of the transport rfc 4253, K_S + e + f + K */
@@ -202,7 +229,7 @@ If you test it please contact the Dropbear author */
 
 #define DROPBEAR_AES ((DROPBEAR_AES256) || (DROPBEAR_AES128))
 
-#define DROPBEAR_TWOFISH ((DROPBEAR_TWOFISH256) || (DROPBEAR_TWOFISH128))
+#define DROPBEAR_AEAD_MODE ((DROPBEAR_CHACHA20POLY1305) || (DROPBEAR_ENABLE_GCM_MODE))
 
 #define DROPBEAR_CLI_ANYTCPFWD ((DROPBEAR_CLI_REMOTETCPFWD) || (DROPBEAR_CLI_LOCALTCPFWD))
 
@@ -225,7 +252,7 @@ If you test it please contact the Dropbear author */
 #define DROPBEAR_ZLIB_MEM_LEVEL 8
 
 #if (DROPBEAR_SVR_PASSWORD_AUTH) && (DROPBEAR_SVR_PAM_AUTH)
-#error "You can't turn on PASSWORD and PAM auth both at once. Fix it in options.h"
+#error "You can't turn on PASSWORD and PAM auth both at once. Fix it in localoptions.h"
 #endif
 
 /* PAM requires ./configure --enable-pam */
@@ -241,13 +268,15 @@ If you test it please contact the Dropbear author */
 	#error "At least one server authentication type must be enabled. DROPBEAR_SVR_PUBKEY_AUTH and DROPBEAR_SVR_PASSWORD_AUTH are recommended."
 #endif
 
+#if (DROPBEAR_PLUGIN && !DROPBEAR_SVR_PUBKEY_AUTH)
+	#error "You must define DROPBEAR_SVR_PUBKEY_AUTH in order to use plugins"
+#endif
 
-#if !(DROPBEAR_AES128 || DROPBEAR_3DES || DROPBEAR_AES256 || DROPBEAR_BLOWFISH \
-      || DROPBEAR_TWOFISH256 || DROPBEAR_TWOFISH128)
+#if !(DROPBEAR_AES128 || DROPBEAR_3DES || DROPBEAR_AES256 || DROPBEAR_CHACHA20POLY1305)
 	#error "At least one encryption algorithm must be enabled. AES128 is recommended."
 #endif
 
-#if !(DROPBEAR_RSA || DROPBEAR_DSS || DROPBEAR_ECDSA)
+#if !(DROPBEAR_RSA || DROPBEAR_DSS || DROPBEAR_ECDSA || DROPBEAR_ED25519)
 	#error "At least one hostkey or public-key algorithm must be enabled; RSA is recommended."
 #endif
 
@@ -315,5 +344,18 @@ If you test it please contact the Dropbear author */
 #define DROPBEAR_SERVER_TCP_FAST_OPEN 0
 #define DROPBEAR_CLIENT_TCP_FAST_OPEN 0
 #endif
+
+#define DROPBEAR_TRACKING_MALLOC (DROPBEAR_FUZZ)
+
+/* Used to work around Memory Sanitizer false positives */
+#if defined(__has_feature)
+#  if __has_feature(memory_sanitizer)
+#    define DROPBEAR_MSAN 1
+#  endif
+#endif
+#ifndef DROPBEAR_MSAN 
+#define DROPBEAR_MSAN 0
+#endif
+
 
 /* no include guard for this file */

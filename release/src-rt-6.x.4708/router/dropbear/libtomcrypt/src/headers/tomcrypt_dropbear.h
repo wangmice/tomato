@@ -10,24 +10,18 @@
 #define LTC_SMALL_CODE
 #endif
 
-#if DROPBEAR_BLOWFISH
-#define LTC_BLOWFISH
-#endif
+/* Fewer entries needed */
+#define TAB_SIZE      5
+
 #if DROPBEAR_AES
 #define LTC_RIJNDAEL
-#endif
-/* _TABLES tells it to use tables during setup, _SMALL means to use the smaller scheduled key format
- * (saves 4KB of ram), _ALL_TABLES enables all tables during setup */
-#if DROPBEAR_TWOFISH
-#define LTC_TWOFISH
-#define LTC_TWOFISH_SMALL
 #endif
 
 #if DROPBEAR_3DES
 #define LTC_DES
 #endif
 
-#if DROPBEAR_ENABLE_CTR_MODE
+#if DROPBEAR_ENABLE_CBC_MODE
 #define LTC_CBC_MODE
 #endif
 
@@ -35,6 +29,14 @@
 #define LTC_CTR_MODE
 #endif
 
+#if DROPBEAR_ENABLE_GCM_MODE
+#define LTC_GCM_MODE
+#endif
+
+#if DROPBEAR_CHACHA20POLY1305
+#define LTC_CHACHA
+#define LTC_POLY1305
+#endif
 
 #if DROPBEAR_SHA512
 #define LTC_SHA512
@@ -48,7 +50,9 @@
 #define LTC_SHA256
 #endif
 
+#if DROPBEAR_SHA1
 #define LTC_SHA1
+#endif
 
 #if DROPBEAR_MD5
 #define LTC_MD5

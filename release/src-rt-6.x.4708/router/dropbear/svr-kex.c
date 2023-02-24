@@ -38,13 +38,15 @@
 #include "gensignkey.h"
 
 static void send_msg_kexdh_reply(mp_int *dh_e, buffer *ecdh_qs);
+#if DROPBEAR_EXT_INFO
+static void send_msg_ext_info(void);
+#endif
 
 /* Handle a diffie-hellman key exchange initialisation. This involves
  * calculating a session key reply value, and corresponding hash. These
  * are carried out by send_msg_kexdh_reply(). recv_msg_kexdh_init() calls
  * that function, then brings the new keys into use */
 void recv_msg_kexdh_init() {
-
 	DEF_MP_INT(dh_e);
 	buffer *ecdh_qs = NULL;
 
@@ -86,6 +88,14 @@ void recv_msg_kexdh_init() {
 	}
 
 	send_msg_newkeys();
+
+#if DROPBEAR_EXT_INFO
+	/* Only send it following the first newkeys */
+	if (!ses.kexstate.donesecondkex && ses.allow_ext_info) {
+		send_msg_ext_info();
+	}
+#endif
+
 	ses.requirenext = SSH_MSG_NEWKEYS;
 	TRACE(("leave recv_msg_kexdh_init"))
 }
@@ -96,6 +106,7 @@ void recv_msg_kexdh_init() {
 static void svr_ensure_hostkey() {
 
 	const char* fn = NULL;
+	char *expand_fn = NULL;
 	enum signkey_type type = ses.newkeys->algo_hostkey;
 	void **hostkey = signkey_key_ptr(svr_opts.hostkey, type);
 	int ret = DROPBEAR_FAILURE;
@@ -123,19 +134,28 @@ static void svr_ensure_hostkey() {
 			fn = ECDSA_PRIV_FILENAME;
 			break;
 #endif
+#if DROPBEAR_ED25519
+		case DROPBEAR_SIGNKEY_ED25519:
+			fn = ED25519_PRIV_FILENAME;
+			break;
+#endif
 		default:
 			dropbear_assert(0);
 	}
 
-	if (readhostkey(fn, svr_opts.hostkey, &type) == DROPBEAR_SUCCESS) {
-		return;
+	expand_fn = expand_homedir_path(fn);
+
+	ret = readhostkey(expand_fn, svr_opts.hostkey, &type);
+	if (ret == DROPBEAR_SUCCESS) {
+		goto out;
 	}
 
-	if (signkey_generate(type, 0, fn, 1) == DROPBEAR_FAILURE) {
+	if (signkey_generate(type, 0, expand_fn, 1) == DROPBEAR_FAILURE) {
 		goto out;
 	}
 	
-	ret = readhostkey(fn, svr_opts.hostkey, &type);
+	/* Read what we just generated (or another process raced us) */
+	ret = readhostkey(expand_fn, svr_opts.hostkey, &type);
 
 	if (ret == DROPBEAR_SUCCESS) {
 		char *fp = NULL;
@@ -146,16 +166,16 @@ static void svr_ensure_hostkey() {
 		len = key_buf->len - key_buf->pos;
 		fp = sign_key_fingerprint(buf_getptr(key_buf, len), len);
 		dropbear_log(LOG_INFO, "Generated hostkey %s, fingerprint is %s",
-			fn, fp);
+			expand_fn, fp);
 		m_free(fp);
 		buf_free(key_buf);
 	}
 
 out:
-	if (ret == DROPBEAR_FAILURE)
-	{
-		dropbear_exit("Couldn't read or generate hostkey %s", fn);
+	if (ret == DROPBEAR_FAILURE) {
+		dropbear_exit("Couldn't read or generate hostkey %s", expand_fn);
 	}
+    m_free(expand_fn);
 }
 #endif
 	
@@ -176,6 +196,13 @@ static void send_msg_kexdh_reply(mp_int *dh_e, buffer *ecdh_qs) {
 	if (svr_opts.delay_hostkey)
 	{
 		svr_ensure_hostkey();
+	}
+#endif
+
+#if DROPBEAR_FUZZ
+	if (fuzz.fuzzing && fuzz.skip_kexmaths) {
+		fuzz_fake_send_kexdh_reply();
+		return;
 	}
 #endif
 
@@ -212,7 +239,8 @@ static void send_msg_kexdh_reply(mp_int *dh_e, buffer *ecdh_qs) {
 			{
 			struct kex_curve25519_param *param = gen_kexcurve25519_param();
 			kexcurve25519_comb_key(param, ecdh_qs, svr_opts.hostkey);
-			buf_putstring(ses.writepayload, (const char*)param->pub, CURVE25519_LEN);
+
+			buf_putstring(ses.writepayload, param->pub, CURVE25519_LEN);
 			free_kexcurve25519_param(param);
 			}
 			break;
@@ -221,7 +249,7 @@ static void send_msg_kexdh_reply(mp_int *dh_e, buffer *ecdh_qs) {
 
 	/* calc the signature */
 	buf_put_sign(ses.writepayload, svr_opts.hostkey, 
-			ses.newkeys->algo_hostkey, ses.hash);
+			ses.newkeys->algo_signature, ses.hash);
 
 	/* the SSH_MSG_KEXDH_REPLY is done */
 	encrypt_packet();
@@ -229,3 +257,20 @@ static void send_msg_kexdh_reply(mp_int *dh_e, buffer *ecdh_qs) {
 	TRACE(("leave send_msg_kexdh_reply"))
 }
 
+#if DROPBEAR_EXT_INFO
+/* Only used for server-sig-algs on the server side */
+static void send_msg_ext_info(void) {
+	TRACE(("enter send_msg_ext_info"))
+
+	buf_putbyte(ses.writepayload, SSH_MSG_EXT_INFO);
+	/* nr-extensions */
+	buf_putint(ses.writepayload, 1);
+
+	buf_putstring(ses.writepayload, SSH_SERVER_SIG_ALGS, strlen(SSH_SERVER_SIG_ALGS));
+	buf_put_algolist_all(ses.writepayload, sigalgs, 1);
+	
+	encrypt_packet();
+
+	TRACE(("leave send_msg_ext_info"))
+}
+#endif

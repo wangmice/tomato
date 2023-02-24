@@ -43,6 +43,10 @@
  * mp_int	y
  * mp_int	x
  *
+ * Ed25519:
+ * string	"ssh-ed25519"
+ * string	k (32 bytes) + A (32 bytes)
+ *
  */
 #include "includes.h"
 #include "signkey.h"
@@ -51,6 +55,7 @@
 
 #include "genrsa.h"
 #include "gendss.h"
+#include "gened25519.h"
 #include "ecdsa.h"
 #include "crypto_desc.h"
 #include "dbrandom.h"
@@ -76,6 +81,9 @@ static void printhelp(char * progname) {
 #if DROPBEAR_ECDSA
 					"		ecdsa\n"
 #endif
+#if DROPBEAR_ED25519
+					"		ed25519\n"
+#endif
 					"-f filename    Use filename for the secret key.\n"
 					"               ~/.ssh/id_dropbear is recommended for client keys.\n"
 					"-s bits	Key size in bits, should be a multiple of 8 (optional)\n"
@@ -95,6 +103,9 @@ static void printhelp(char * progname) {
 #endif
 					"\n"
 #endif
+#if DROPBEAR_ED25519
+					"           Ed25519 has a fixed size of 256 bits\n"
+#endif
 					"-y		Just print the publickey and fingerprint for the\n		private key in <filename>.\n"
 #if DEBUG_TRACE
 					"-v		verbose\n"
@@ -106,6 +117,14 @@ static void printhelp(char * progname) {
 static void check_signkey_bits(enum signkey_type type, int bits)
 {
 	switch (type) {
+#if DROPBEAR_ED25519
+		case DROPBEAR_SIGNKEY_ED25519:
+			if (bits != 256) {
+				dropbear_exit("Ed25519 keys have a fixed size of 256 bits\n");
+				exit(EXIT_FAILURE);
+			}
+			break;
+#endif
 #if DROPBEAR_RSA
 		case DROPBEAR_SIGNKEY_RSA:
 			if (bits < 512 || bits > 4096 || (bits % 8 != 0)) {
@@ -114,7 +133,7 @@ static void check_signkey_bits(enum signkey_type type, int bits)
 			}
 			break;
 #endif
-#ifdef DROPEAR_DSS
+#if DROPEAR_DSS
 		case DROPBEAR_SIGNKEY_DSS:
 			if (bits != 1024) {
 				dropbear_exit("DSS keys have a fixed size of 1024 bits\n");
@@ -176,7 +195,7 @@ int main(int argc, char ** argv) {
 					break;
 #if DEBUG_TRACE
 				case 'v':
-					debug_trace = 1;
+					debug_trace = DROPBEAR_VERBOSE_LEVEL;
 					break;
 #endif
 				default:
@@ -222,6 +241,12 @@ int main(int argc, char ** argv) {
 	if (strcmp(typetext, "ecdsa") == 0)
 	{
 		keytype = DROPBEAR_SIGNKEY_ECDSA_KEYGEN;
+	}
+#endif
+#if DROPBEAR_ED25519
+	if (strcmp(typetext, "ed25519") == 0)
+	{
+		keytype = DROPBEAR_SIGNKEY_ED25519;
 	}
 #endif
 
@@ -284,8 +309,7 @@ static int printpubfile(const char* filename) {
 	err = DROPBEAR_SUCCESS;
 
 out:
-	buf_burn(buf);
-	buf_free(buf);
+	buf_burn_free(buf);
 	buf = NULL;
 	if (key) {
 		sign_key_free(key);
@@ -317,7 +341,7 @@ static void printpubkey(sign_key * key, int keytype) {
 	err = base64_encode(buf_getptr(buf, len), len, base64key, &base64len);
 
 	if (err != CRYPT_OK) {
-		fprintf(stderr, "base64 failed");
+		dropbear_exit("base64 failed");
 	}
 
 	typestring = signkey_name_from_type(keytype, NULL);

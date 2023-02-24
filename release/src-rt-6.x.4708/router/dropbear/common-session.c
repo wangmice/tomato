@@ -64,9 +64,19 @@ void common_session_init(int sock_in, int sock_out) {
 		setnonblocking(sock_out);
 	}
 
-	ses.socket_prio = DROPBEAR_PRIO_DEFAULT;
+	ses.socket_prio = DROPBEAR_PRIO_NORMAL;
 	/* Sets it to lowdelay */
 	update_channel_prio();
+
+#if !DROPBEAR_SVR_MULTIUSER
+	/* A sanity check to prevent an accidental configuration option
+	   leaving multiuser systems exposed */
+	errno = 0;
+	getuid();
+	if (errno != ENOSYS) {
+		dropbear_exit("Non-multiuser Dropbear requires a non-multiuser kernel");
+	}
+#endif
 
 	now = monotonic_now();
 	ses.connect_time = now;
@@ -75,14 +85,18 @@ void common_session_init(int sock_in, int sock_out) {
 	ses.last_packet_time_any_sent = 0;
 	ses.last_packet_time_keepalive_sent = 0;
 	
+#if DROPBEAR_FUZZ
+	if (!fuzz.fuzzing)
+#endif
+	{
 	if (pipe(ses.signal_pipe) < 0) {
 		dropbear_exit("Signal pipe failed");
 	}
 	setnonblocking(ses.signal_pipe[0]);
 	setnonblocking(ses.signal_pipe[1]);
-
 	ses.maxfd = MAX(ses.maxfd, ses.signal_pipe[0]);
 	ses.maxfd = MAX(ses.maxfd, ses.signal_pipe[1]);
+	}
 	
 	ses.writepayload = buf_new(TRANS_MAX_PAYLOAD_LEN);
 	ses.transseq = 0;
@@ -133,6 +147,10 @@ void common_session_init(int sock_in, int sock_out) {
 
 	ses.allowprivport = 0;
 
+#if DROPBEAR_PLUGIN
+        ses.plugin_session = NULL;
+#endif
+
 	TRACE(("leave session_init"))
 }
 
@@ -148,13 +166,19 @@ void session_loop(void(*loophandler)(void)) {
 
 		timeout.tv_sec = select_timeout();
 		timeout.tv_usec = 0;
-		FD_ZERO(&writefd);
-		FD_ZERO(&readfd);
+		DROPBEAR_FD_ZERO(&writefd);
+		DROPBEAR_FD_ZERO(&readfd);
+
 		dropbear_assert(ses.payload == NULL);
 
 		/* We get woken up when signal handlers write to this pipe.
 		   SIGCHLD in svr-chansession is the only one currently. */
+#if DROPBEAR_FUZZ
+		if (!fuzz.fuzzing) 
+#endif
+		{
 		FD_SET(ses.signal_pipe[0], &readfd);
+		}
 
 		/* set up for channels which can be read/written */
 		setchannelfds(&readfd, &writefd, writequeue_has_space);
@@ -195,8 +219,8 @@ void session_loop(void(*loophandler)(void)) {
 			 * want to iterate over channels etc for reading, to handle
 			 * server processes exiting etc. 
 			 * We don't want to read/write FDs. */
-			FD_ZERO(&writefd);
-			FD_ZERO(&readfd);
+			DROPBEAR_FD_ZERO(&writefd);
+			DROPBEAR_FD_ZERO(&readfd);
 		}
 		
 		/* We'll just empty out the pipe if required. We don't do
@@ -261,8 +285,7 @@ static void cleanup_buf(buffer **buf) {
 	if (!*buf) {
 		return;
 	}
-	buf_burn(*buf);
-	buf_free(*buf);
+	buf_burn_free(*buf);
 	*buf = NULL;
 }
 
@@ -298,6 +321,16 @@ void session_cleanup() {
 		buf_free(dequeue(&ses.writequeue));
 	}
 
+	m_free(ses.newkeys);
+#ifndef DISABLE_ZLIB
+	if (ses.keys->recv.zstream != NULL) {
+		if (inflateEnd(ses.keys->recv.zstream) == Z_STREAM_ERROR) {
+			dropbear_exit("Crypto error");
+		}
+		m_free(ses.keys->recv.zstream);
+	}
+#endif
+
 	m_free(ses.remoteident);
 	m_free(ses.authstate.pw_dir);
 	m_free(ses.authstate.pw_name);
@@ -327,7 +360,7 @@ void session_cleanup() {
 void send_session_identification() {
 	buffer *writebuf = buf_new(strlen(LOCAL_IDENT "\r\n") + 1);
 	buf_putbytes(writebuf, (const unsigned char *) LOCAL_IDENT "\r\n", strlen(LOCAL_IDENT "\r\n"));
-	writebuf_enqueue(writebuf, 0);
+	writebuf_enqueue(writebuf);
 }
 
 static void read_session_identification() {
@@ -336,8 +369,11 @@ static void read_session_identification() {
 	int len = 0;
 	char done = 0;
 	int i;
-	/* If they send more than 50 lines, something is wrong */
-	for (i = 0; i < 50; i++) {
+
+	/* Servers may send other lines of data before sending the
+	 * version string, client must be able to process such lines.
+	 * If they send more than 50 lines, something is wrong */
+	for (i = IS_DROPBEAR_CLIENT ? 50 : 1; i > 0; i--) {
 		len = ident_readln(ses.sock_in, linebuf, sizeof(linebuf));
 
 		if (len < 0 && errno != EINTR) {
@@ -367,7 +403,7 @@ static void read_session_identification() {
 		dropbear_exit("Incompatible remote version '%s'", ses.remoteident);
 	}
 
-	TRACE(("remoteident: %s", ses.remoteident))
+	DEBUG1(("remoteident: %s", ses.remoteident))
 
 }
 
@@ -387,7 +423,7 @@ static int ident_readln(int fd, char* buf, int count) {
 		return -1;
 	}
 
-	FD_ZERO(&fds);
+	DROPBEAR_FD_ZERO(&fds);
 
 	/* select since it's a non-blocking fd */
 	
@@ -428,6 +464,11 @@ static int ident_readln(int fd, char* buf, int count) {
 				TRACE(("leave ident_readln: EOF"))
 				return -1;
 			}
+
+#if DROPBEAR_FUZZ
+			fuzz_dump(&in, 1);
+#endif
+
 			if (in == '\n') {
 				/* end of ident string */
 				break;
@@ -625,26 +666,16 @@ void update_channel_prio() {
 		return;
 	}
 
-	new_prio = DROPBEAR_PRIO_BULK;
+	new_prio = DROPBEAR_PRIO_NORMAL;
 	for (i = 0; i < ses.chansize; i++) {
 		struct Channel *channel = ses.channels[i];
-		if (!channel || channel->prio == DROPBEAR_CHANNEL_PRIO_EARLY) {
-			if (channel && channel->prio == DROPBEAR_CHANNEL_PRIO_EARLY) {
-				TRACE(("update_channel_prio: early %d", channel->index))
-			}
+		if (!channel) {
 			continue;
 		}
 		any = 1;
-		if (channel->prio == DROPBEAR_CHANNEL_PRIO_INTERACTIVE)
-		{
-			TRACE(("update_channel_prio: lowdelay %d", channel->index))
+		if (channel->prio == DROPBEAR_PRIO_LOWDELAY) {
 			new_prio = DROPBEAR_PRIO_LOWDELAY;
 			break;
-		} else if (channel->prio == DROPBEAR_CHANNEL_PRIO_UNKNOWABLE
-			&& new_prio == DROPBEAR_PRIO_BULK)
-		{
-			TRACE(("update_channel_prio: unknowable %d", channel->index))
-			new_prio = DROPBEAR_PRIO_DEFAULT;
 		}
 	}
 

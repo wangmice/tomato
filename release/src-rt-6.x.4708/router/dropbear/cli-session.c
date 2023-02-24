@@ -81,6 +81,7 @@ static const packettype cli_packettypes[] = {
 	{SSH_MSG_REQUEST_SUCCESS, ignore_recv_response},
 	{SSH_MSG_REQUEST_FAILURE, ignore_recv_response},
 #endif
+	{SSH_MSG_EXT_INFO, recv_msg_ext_info},
 	{0, NULL} /* End */
 };
 
@@ -101,6 +102,9 @@ void cli_connected(int result, int sock, void* userdata, const char *errstring)
 		dropbear_exit("Connect failed: %s", errstring);
 	}
 	myses->sock_in = myses->sock_out = sock;
+	DEBUG1(("cli_connected"))
+	ses.socket_prio = DROPBEAR_PRIO_NORMAL;
+	/* switches to lowdelay */
 	update_channel_prio();
 }
 
@@ -164,6 +168,7 @@ static void cli_session_init(pid_t proxy_cmd_pid) {
 	/* Auth */
 	cli_ses.lastprivkey = NULL;
 	cli_ses.lastauthtype = 0;
+	cli_ses.is_trivial_auth = 1;
 
 	/* For printing "remote host closed" for the user */
 	ses.remoteclosed = cli_remoteclosed;
@@ -244,6 +249,9 @@ static void cli_sessionloop() {
 			/* We've got the transport layer sorted, we now need to request
 			 * userauth */
 			send_msg_service_request(SSH_SERVICE_USERAUTH);
+			/* We aren't using any "implicit server authentication" methods,
+			so don't need to wait for a response for SSH_SERVICE_USERAUTH
+			before sending the auth messages (rfc4253 10) */
 			cli_auth_getmethods();
 			cli_ses.state = USERAUTH_REQ_SENT;
 			TRACE(("leave cli_sessionloop: sent userauth methods req"))
@@ -351,11 +359,19 @@ static void cli_session_cleanup(void) {
 	(void)fcntl(cli_ses.stdoutcopy, F_SETFL, cli_ses.stdoutflags);
 	(void)fcntl(cli_ses.stderrcopy, F_SETFL, cli_ses.stderrflags);
 
-	cli_tty_cleanup();
+	/* Don't leak */
+	m_close(cli_ses.stdincopy);
+	m_close(cli_ses.stdoutcopy);
+	m_close(cli_ses.stderrcopy);
 
+	cli_tty_cleanup();
+	if (cli_ses.server_sig_algs) {
+		buf_free(cli_ses.server_sig_algs);
+	}
 }
 
 static void cli_finished() {
+	TRACE(("cli_finished()"))
 
 	session_cleanup();
 	fprintf(stderr, "Connection to %s@%s:%s closed.\n", cli_opts.username,
@@ -399,7 +415,75 @@ void cleantext(char* dirtytext) {
 }
 
 static void recv_msg_global_request_cli(void) {
-	TRACE(("recv_msg_global_request_cli"))
-	/* Send a proper rejection */
-	send_msg_request_failure();
+	unsigned int wantreply = 0;
+
+	buf_eatstring(ses.payload);
+	wantreply = buf_getbool(ses.payload);
+
+	TRACE(("recv_msg_global_request_cli: want_reply: %u", wantreply));
+
+	if (wantreply) {
+		/* Send a proper rejection */
+		send_msg_request_failure();
+	}
 }
+
+void cli_dropbear_exit(int exitcode, const char* format, va_list param) {
+	char exitmsg[150];
+	char fullmsg[300];
+
+	/* Note that exit message must be rendered before session cleanup */
+
+	/* Render the formatted exit message */
+	vsnprintf(exitmsg, sizeof(exitmsg), format, param);
+	TRACE(("Exited, cleaning up: %s", exitmsg))
+
+	/* Add the prefix depending on session/auth state */
+	if (!ses.init_done) {
+		snprintf(fullmsg, sizeof(fullmsg), "Exited: %s", exitmsg);
+	} else {
+		snprintf(fullmsg, sizeof(fullmsg), 
+				"Connection to %s@%s:%s exited: %s", 
+				cli_opts.username, cli_opts.remotehost, 
+				cli_opts.remoteport, exitmsg);
+	}
+
+	/* Do the cleanup first, since then the terminal will be reset */
+	session_cleanup();
+	
+#if DROPBEAR_FUZZ
+    if (fuzz.do_jmp) {
+        longjmp(fuzz.jmp, 1);
+    }
+#endif
+
+	/* Avoid printing onwards from terminal cruft */
+	fprintf(stderr, "\n");
+
+	dropbear_log(LOG_INFO, "%s", fullmsg);
+
+	exit(exitcode);
+}
+
+void cli_dropbear_log(int priority, const char* format, va_list param) {
+
+	char printbuf[1024];
+	const char *name;
+
+	name = cli_opts.progname;
+	if (!name) {
+		name = "dbclient";
+	}
+
+	vsnprintf(printbuf, sizeof(printbuf), format, param);
+
+#ifndef DISABLE_SYSLOG
+	if (opts.usingsyslog) {
+		syslog(priority, "%s", printbuf);
+	}
+#endif
+
+	fprintf(stderr, "%s: %s\n", name, printbuf);
+	fflush(stderr);
+}
+

@@ -72,13 +72,16 @@ typedef struct svr_runopts {
 
 	int forkbg;
 
-	/* ports and addresses are arrays of the portcount 
+	/* ports and addresses are arrays of the portcount
 	listening ports. strings are malloced. */
 	char *ports[DROPBEAR_MAX_PORTS];
 	unsigned int portcount;
 	char *addresses[DROPBEAR_MAX_PORTS];
 
 	int inetdmode;
+	/* Hidden "-2 childpipe_fd" flag indicates it's re-executing itself,
+	   stores the childpipe preauth file descriptor. Set to -1 otherwise. */
+	int reexec_childpipe;
 
 	/* Flags indicating whether to use ipv4 and ipv6 */
 	/* not used yet
@@ -90,7 +93,6 @@ typedef struct svr_runopts {
 	/* whether to print the MOTD */
 	int domotd;
 #endif
-
 	int norootlogin;
 
 #ifdef HAVE_GETGROUPLIST
@@ -125,6 +127,13 @@ typedef struct svr_runopts {
 
 	char * forced_command;
 
+#if DROPBEAR_PLUGIN 
+        char *pubkey_plugin;
+        char *pubkey_plugin_options;
+#endif
+
+	int pass_on_env;
+
 } svr_runopts;
 
 extern svr_runopts svr_opts;
@@ -136,7 +145,7 @@ typedef struct cli_runopts {
 
 	char *progname;
 	char *remotehost;
-	char *remoteport;
+	const char *remoteport;
 
 	char *own_user;
 	char *username;
@@ -146,6 +155,7 @@ typedef struct cli_runopts {
 	int always_accept_key;
 	int no_hostkey_check;
 	int no_cmd;
+	int quiet;
 	int backgrounded;
 	int is_subsystem;
 #if DROPBEAR_CLI_PUBKEY_AUTH
@@ -154,6 +164,7 @@ typedef struct cli_runopts {
 #if DROPBEAR_CLI_ANYTCPFWD
 	int exit_on_fwd_failure;
 #endif
+	int disable_trivial_auth;
 #if DROPBEAR_CLI_REMOTETCPFWD
 	m_list * remotefwds;
 #endif
@@ -187,5 +198,7 @@ void parse_ciphers_macs(void);
 #endif
 
 void print_version(void);
+void parse_recv_window(const char* recv_window_arg);
+int split_address_port(const char* spec, char **first, char ** second);
 
 #endif /* DROPBEAR_RUNOPTS_H_ */

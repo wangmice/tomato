@@ -35,9 +35,9 @@
 static int newtcpforwarded(struct Channel * channel);
 
 const struct ChanType cli_chan_tcpremote = {
-	1, /* sepfds */
 	"forwarded-tcpip",
 	newtcpforwarded,
+	NULL,
 	NULL,
 	NULL,
 	NULL
@@ -50,9 +50,9 @@ static int cli_localtcp(const char* listenaddr,
 		const char* remoteaddr,
 		unsigned int remoteport);
 static const struct ChanType cli_chan_tcplocal = {
-	1, /* sepfds */
 	"direct-tcpip",
-	tcp_prio_inithandler,
+	NULL,
+	NULL,
 	NULL,
 	NULL,
 	NULL
@@ -135,7 +135,7 @@ static int cli_localtcp(const char* listenaddr,
 	tcpinfo->chantype = &cli_chan_tcplocal;
 	tcpinfo->tcp_type = direct;
 
-	ret = listen_tcpfwd(tcpinfo);
+	ret = listen_tcpfwd(tcpinfo, NULL);
 
 	if (ret == DROPBEAR_FAILURE) {
 		m_free(tcpinfo);
@@ -271,12 +271,11 @@ static int newtcpforwarded(struct Channel * channel) {
                 origaddr, origport);
 		goto out;
 	}
-	
-	snprintf(portstring, sizeof(portstring), "%u", fwd->connectport);
-	channel->conn_pending = connect_remote(fwd->connectaddr, portstring, channel_connect_done, channel, NULL, NULL);
 
-	channel->prio = DROPBEAR_CHANNEL_PRIO_UNKNOWABLE;
-	
+	snprintf(portstring, sizeof(portstring), "%u", fwd->connectport);
+	channel->conn_pending = connect_remote(fwd->connectaddr, portstring, channel_connect_done,
+		channel, NULL, NULL, DROPBEAR_PRIO_NORMAL);
+
 	err = SSH_OPEN_IN_PROGRESS;
 
 out:

@@ -31,9 +31,7 @@
 #include "dbrandom.h"
 #include "crypto_desc.h"
 #include "netio.h"
-
-static void cli_dropbear_exit(int exitcode, const char* format, va_list param) ATTRIB_NORETURN;
-static void cli_dropbear_log(int priority, const char* format, va_list param);
+#include "fuzz.h"
 
 #if DROPBEAR_CLI_PROXYCMD
 static void cli_proxy_cmd(int *sock_in, int *sock_out, pid_t *pid_out);
@@ -49,6 +47,7 @@ int main(int argc, char ** argv) {
 
 	int sock_in, sock_out;
 	struct dropbear_progress_connection *progress = NULL;
+	pid_t proxy_cmd_pid = 0;
 
 	_dropbear_exit = cli_dropbear_exit;
 	_dropbear_log = cli_dropbear_log;
@@ -66,14 +65,17 @@ int main(int argc, char ** argv) {
 	}
 #endif
 
-	TRACE(("user='%s' host='%s' port='%s' bind_address='%s' bind_port='%s'", cli_opts.username,
-				cli_opts.remotehost, cli_opts.remoteport, cli_opts.bind_address, cli_opts.bind_port))
+        if (cli_opts.bind_address) {
+		DEBUG1(("connect to: user=%s host=%s/%s bind_address=%s:%s", cli_opts.username,
+			cli_opts.remotehost, cli_opts.remoteport, cli_opts.bind_address, cli_opts.bind_port))
+	} else {
+		DEBUG1(("connect to: user=%s host=%s/%s",cli_opts.username,cli_opts.remotehost,cli_opts.remoteport))
+	}
 
 	if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
 		dropbear_exit("signal() error");
 	}
 
-	pid_t proxy_cmd_pid = 0;
 #if DROPBEAR_CLI_PROXYCMD
 	if (cli_opts.proxycmd) {
 		cli_proxy_cmd(&sock_in, &sock_out, &proxy_cmd_pid);
@@ -86,8 +88,9 @@ int main(int argc, char ** argv) {
 	} else
 #endif
 	{
-		progress = connect_remote(cli_opts.remotehost, cli_opts.remoteport, 
-			cli_connected, &ses, cli_opts.bind_address, cli_opts.bind_port);
+		progress = connect_remote(cli_opts.remotehost, cli_opts.remoteport,
+			cli_connected, &ses, cli_opts.bind_address, cli_opts.bind_port,
+			DROPBEAR_PRIO_LOWDELAY);
 		sock_in = sock_out = -1;
 	}
 
@@ -97,51 +100,6 @@ int main(int argc, char ** argv) {
 	return -1;
 }
 #endif /* DBMULTI stuff */
-
-static void cli_dropbear_exit(int exitcode, const char* format, va_list param) {
-	char exitmsg[150];
-	char fullmsg[300];
-
-	/* Note that exit message must be rendered before session cleanup */
-
-	/* Render the formatted exit message */
-	vsnprintf(exitmsg, sizeof(exitmsg), format, param);
-
-	/* Add the prefix depending on session/auth state */
-	if (!ses.init_done) {
-		snprintf(fullmsg, sizeof(fullmsg), "Exited: %s", exitmsg);
-	} else {
-		snprintf(fullmsg, sizeof(fullmsg), 
-				"Connection to %s@%s:%s exited: %s", 
-				cli_opts.username, cli_opts.remotehost, 
-				cli_opts.remoteport, exitmsg);
-	}
-
-	/* Do the cleanup first, since then the terminal will be reset */
-	session_cleanup();
-	/* Avoid printing onwards from terminal cruft */
-	fprintf(stderr, "\n");
-
-	dropbear_log(LOG_INFO, "%s", fullmsg);
-	exit(exitcode);
-}
-
-static void cli_dropbear_log(int priority,
-		const char* format, va_list param) {
-
-	char printbuf[1024];
-
-	vsnprintf(printbuf, sizeof(printbuf), format, param);
-
-#ifndef DISABLE_SYSLOG
-	if (opts.usingsyslog) {
-		syslog(priority, "%s", printbuf);
-	}
-#endif
-
-	fprintf(stderr, "%s: %s\n", cli_opts.progname, printbuf);
-	fflush(stderr);
-}
 
 static void exec_proxy_cmd(const void *user_data_cmd) {
 	const char *cmd = user_data_cmd;
@@ -181,6 +139,7 @@ static void cli_proxy_cmd(int *sock_in, int *sock_out, pid_t *pid_out) {
 
 	ret = spawn_command(exec_proxy_cmd, ex_cmd,
 			sock_out, sock_in, NULL, pid_out);
+	DEBUG1(("cmd: %s  pid=%d", ex_cmd,*pid_out))
 	m_free(ex_cmd);
 	if (ret == DROPBEAR_FAILURE) {
 		dropbear_exit("Failed running proxy command");
@@ -192,4 +151,5 @@ static void kill_proxy_sighandler(int UNUSED(signo)) {
 	kill_proxy_command();
 	_exit(1);
 }
+
 #endif /* DROPBEAR_CLI_PROXYCMD */

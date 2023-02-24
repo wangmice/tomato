@@ -185,7 +185,7 @@ arg_setup(char *host, char *remuser, char *cmd)
 }
 
 int
-do_cmd(char *host, char *remuser, char *cmd, int *fdin, int *fdout, int argc)
+do_cmd(char *host, char *remuser, char *cmd, int *fdin, int *fdout)
 {
 	int pin[2], pout[2], reserved[2];
 
@@ -532,8 +532,7 @@ toremote(char *targ, int argc, char **argv)
 				bp = xmalloc(len);
 				(void) snprintf(bp, len, "%s -t %s", cmd, targ);
 				host = cleanhostname(thost);
-				if (do_cmd(host, tuser, bp, &remin,
-				    &remout, argc) < 0)
+				if (do_cmd(host, tuser, bp, &remin, &remout) < 0)
 					exit(1);
 				if (response() < 0)
 					exit(1);
@@ -584,7 +583,7 @@ tolocal(int argc, char **argv)
 		len = strlen(src) + CMDNEEDS + 20;
 		bp = xmalloc(len);
 		(void) snprintf(bp, len, "%s -f %s", cmd, src);
-		if (do_cmd(host, suser, bp, &remin, &remout, argc) < 0) {
+		if (do_cmd(host, suser, bp, &remin, &remout) < 0) {
 			(void) xfree(bp);
 			++errs;
 			continue;
@@ -935,7 +934,8 @@ sink(int argc, char **argv)
 			size = size * 10 + (*cp++ - '0');
 		if (*cp++ != ' ')
 			SCREWUP("size not delimited");
-		if ((strchr(cp, '/') != NULL) || (strcmp(cp, "..") == 0)) {
+		if (*cp == '\0' || strchr(cp, '/') != NULL ||
+		    strcmp(cp, ".") == 0 || strcmp(cp, "..") == 0) {
 			run_err("error: unexpected filename: %s", cp);
 			exit(1);
 		}

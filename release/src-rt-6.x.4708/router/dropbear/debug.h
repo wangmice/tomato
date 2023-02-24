@@ -39,31 +39,58 @@
 /*#define CHECKCLEARTOWRITE() assert(ses.writepayload->len == 0 && \
 		ses.writepayload->pos == 0)*/
 
+#ifndef CHECKCLEARTOWRITE
 #define CHECKCLEARTOWRITE()
-
-/* Define this, compile with -pg and set GMON_OUT_PREFIX=gmon to get gmon
- * output when Dropbear forks. This will allow it gprof to be used.
- * It's useful to run dropbear -F, so you don't fork as much */
-/* (This is Linux specific) */
-/*#define DEBUG_FORKGPROF*/
+#endif
 
 /* A couple of flags, not usually useful, and mightn't do anything */
 
 /*#define DEBUG_KEXHASH*/
 /*#define DEBUG_RSA*/
 
-/* you don't need to touch this block */
+/* The level of TRACE() statements */
+#define DROPBEAR_VERBOSE_LEVEL 4
+
 #if DEBUG_TRACE
-#define TRACE(X) dropbear_trace X;
-#define TRACE2(X) dropbear_trace2 X;
-#else /*DEBUG_TRACE*/
+extern int debug_trace;
+#endif
+
+/* Enable debug trace levels.
+   We can't use __VA_ARGS_ here because Dropbear supports 
+   old ~C89 compilers */
+/* Default is to discard output ... */
+#define DEBUG1(X)
+#define DEBUG2(X)
+#define DEBUG3(X)
 #define TRACE(X)
 #define TRACE2(X)
-#endif /*DEBUG_TRACE*/
+/* ... unless DEBUG_TRACE is high enough */
+#if (DEBUG_TRACE>=1)
+#undef DEBUG1
+#define DEBUG1(X) dropbear_trace1 X;
+#endif
+#if (DEBUG_TRACE>=2)
+#undef DEBUG2
+#define DEBUG2(X) dropbear_trace2 X;
+#endif
+#if (DEBUG_TRACE>=3)
+#undef DEBUG3
+#define DEBUG3(X) dropbear_trace3 X;
+#endif
+#if (DEBUG_TRACE>=4)
+#undef TRACE
+#define TRACE(X) dropbear_trace4 X;
+#endif
+#if (DEBUG_TRACE>=5)
+#undef TRACE2
+#define TRACE2(X) dropbear_trace5 X;
+#endif
 
 /* To debug with GDB it is easier to run with no forking of child processes.
    You will need to pass "-F" as well. */
-/* #define DEBUG_NOFORK */
+#ifndef DEBUG_NOFORK
+#define DEBUG_NOFORK 0
+#endif
 
 
 /* For testing as non-root on shadowed systems, include the crypt of a password

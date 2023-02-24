@@ -211,12 +211,12 @@ static int x11_inithandler(struct Channel *channel) {
 }
 
 static const struct ChanType chan_x11 = {
-	0, /* sepfds */
 	"x11",
 	x11_inithandler, /* inithandler */
 	NULL, /* checkclose */
 	NULL, /* reqhandler */
-	NULL /* closehandler */
+	NULL, /* closehandler */
+	NULL /* cleanup */
 };
 
 

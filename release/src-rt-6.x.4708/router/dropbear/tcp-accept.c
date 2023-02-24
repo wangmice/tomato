@@ -45,13 +45,6 @@ static void cleanup_tcp(const struct Listener *listener) {
 	m_free(tcpinfo);
 }
 
-int tcp_prio_inithandler(struct Channel* channel)
-{
-	TRACE(("tcp_prio_inithandler channel %d", channel->index))
-	channel->prio = DROPBEAR_CHANNEL_PRIO_UNKNOWABLE;
-	return 0;
-}
-
 static void tcp_acceptor(const struct Listener *listener, int sock) {
 
 	int fd;
@@ -110,12 +103,12 @@ static void tcp_acceptor(const struct Listener *listener, int sock) {
 	}
 }
 
-int listen_tcpfwd(struct TCPListener* tcpinfo) {
+int listen_tcpfwd(struct TCPListener* tcpinfo, struct Listener **ret_listener) {
 
 	char portstring[NI_MAXSERV];
 	int socks[DROPBEAR_MAX_SOCKS];
-	struct Listener *listener = NULL;
 	int nsocks;
+	struct Listener *listener;
 	char* errstring = NULL;
 
 	TRACE(("enter listen_tcpfwd"))
@@ -140,6 +133,10 @@ int listen_tcpfwd(struct TCPListener* tcpinfo) {
 	if (listener == NULL) {
 		TRACE(("leave listen_tcpfwd: listener failed"))
 		return DROPBEAR_FAILURE;
+	}
+
+	if (ret_listener) {
+		*ret_listener = listener;
 	}
 
 	TRACE(("leave listen_tcpfwd: success"))

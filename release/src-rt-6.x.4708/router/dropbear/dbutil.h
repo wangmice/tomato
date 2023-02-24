@@ -30,6 +30,7 @@
 #include "buffer.h"
 #include "queue.h"
 #include "dbhelpers.h"
+#include "dbmalloc.h"
 
 #ifndef DISABLE_SYSLOG
 void startsyslog(const char *ident);
@@ -46,8 +47,11 @@ void dropbear_log(int priority, const char* format, ...) ATTRIB_PRINTF(2,3) ;
 void fail_assert(const char* expr, const char* file, int line) ATTRIB_NORETURN;
 
 #if DEBUG_TRACE
-void dropbear_trace(const char* format, ...) ATTRIB_PRINTF(1,2);
+void dropbear_trace1(const char* format, ...) ATTRIB_PRINTF(1,2);
 void dropbear_trace2(const char* format, ...) ATTRIB_PRINTF(1,2);
+void dropbear_trace3(const char* format, ...) ATTRIB_PRINTF(1,2);
+void dropbear_trace4(const char* format, ...) ATTRIB_PRINTF(1,2);
+void dropbear_trace5(const char* format, ...) ATTRIB_PRINTF(1,2);
 void printhex(const char * label, const unsigned char * buf, int len);
 void printmpint(const char *label, mp_int *mp);
 void debug_start_net(void);
@@ -66,19 +70,21 @@ int buf_readfile(buffer* buf, const char* filename);
 int buf_getline(buffer * line, FILE * authfile);
 
 void m_close(int fd);
-void * m_malloc(size_t size);
-void * m_strdup(const char * str);
-void * m_realloc(void* ptr, size_t size);
-#define m_free(X) do {free(X); (X) = NULL;} while (0)
 void setnonblocking(int fd);
 void disallow_core(void);
 int m_str_to_uint(const char* str, unsigned int *val);
+/* The same as snprintf() but exits rather than returning negative */
+int m_snprintf(char *str, size_t size, const char *format, ...);
 
 /* Used to force mp_ints to be initialised */
 #define DEF_MP_INT(X) mp_int X = {0, 0, 0, NULL}
 
 /* Dropbear assertion */
-#define dropbear_assert(X) do { if (!(X)) { fail_assert(#X, __FILE__, __LINE__); } } while (0)
+#ifndef DROPBEAR_ASSERT_ENABLED
+#define DROPBEAR_ASSERT_ENABLED 0
+#endif
+
+#define dropbear_assert(X) do { if (DROPBEAR_ASSERT_ENABLED && !(X)) { fail_assert(#X, __FILE__, __LINE__); } } while (0)
 
 /* Returns 0 if a and b have the same contents */
 int constant_time_memcmp(const void* a, const void *b, size_t n);
@@ -86,9 +92,28 @@ int constant_time_memcmp(const void* a, const void *b, size_t n);
 /* Returns a time in seconds that doesn't go backwards - does not correspond to
 a real-world clock */
 time_t monotonic_now(void);
+/* Higher resolution clock_gettime(CLOCK_MONOTONIC) wrapper */
+void gettime_wrapper(struct timespec *now);
 
 char * expand_homedir_path(const char *inpath);
 
 void fsync_parent_dir(const char* fn);
+
+int fd_read_pending(int fd);
+
+#if DROPBEAR_MSAN
+/* FD_ZERO seems to leave some memory uninitialized. clear it to avoid false positives */
+#define DROPBEAR_FD_ZERO(fds) do { memset((fds), 0x0, sizeof(fd_set)); FD_ZERO(fds); } while(0)
+#else
+#define DROPBEAR_FD_ZERO(fds) FD_ZERO(fds)
+#endif
+
+/* dropbearmulti entry points */
+int dropbear_main(int argc, char ** argv, const char * multipath);
+int cli_main(int argc, char ** argv);
+int dropbearkey_main(int argc, char ** argv);
+int dropbearconvert_main(int argc, char ** argv);
+int scp_main(int argc, char ** argv);
+
 
 #endif /* DROPBEAR_DBUTIL_H_ */

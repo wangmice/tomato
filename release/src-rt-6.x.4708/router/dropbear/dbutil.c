@@ -120,6 +120,12 @@ static void generic_dropbear_exit(int exitcode, const char* format,
 
 	_dropbear_log(LOG_INFO, fmtbuf, param);
 
+#if DROPBEAR_FUZZ
+    if (fuzz.do_jmp) {
+        longjmp(fuzz.jmp, 1);
+    }
+#endif
+
 	exit(exitcode);
 }
 
@@ -149,7 +155,7 @@ void dropbear_log(int priority, const char* format, ...) {
 }
 
 
-#if DEBUG_TRACE
+#if DEBUG_TRACE 
 
 static double debug_start_time = -1;
 
@@ -179,39 +185,63 @@ static double time_since_start()
 	return nowf - debug_start_time;
 }
 
-void dropbear_trace(const char* format, ...) {
-	va_list param;
-
-	if (!debug_trace) {
+static void dropbear_tracelevel(int level, const char *format, va_list param)
+{
+	if (debug_trace == 0 || debug_trace < level) {
 		return;
 	}
 
-	va_start(param, format);
-	fprintf(stderr, "TRACE  (%d) %f: ", getpid(), time_since_start());
+	fprintf(stderr, "TRACE%d (%d) %f: ", level, getpid(), time_since_start());
 	vfprintf(stderr, format, param);
 	fprintf(stderr, "\n");
+}
+#if (DEBUG_TRACE>=1)
+void dropbear_trace1(const char* format, ...) {
+	va_list param;
+
+	va_start(param, format);
+	dropbear_tracelevel(1, format, param);
 	va_end(param);
 }
-
+#endif
+#if (DEBUG_TRACE>=2)
 void dropbear_trace2(const char* format, ...) {
-	static int trace_env = -1;
 	va_list param;
 
-	if (trace_env == -1) {
-		trace_env = getenv("DROPBEAR_TRACE2") ? 1 : 0;
-	}
-
-	if (!(debug_trace && trace_env)) {
-		return;
-	}
-
 	va_start(param, format);
-	fprintf(stderr, "TRACE2 (%d) %f: ", getpid(), time_since_start());
-	vfprintf(stderr, format, param);
-	fprintf(stderr, "\n");
+	dropbear_tracelevel(2, format, param);
 	va_end(param);
 }
-#endif /* DEBUG_TRACE */
+#endif
+#if (DEBUG_TRACE>=3)
+void dropbear_trace3(const char* format, ...) {
+	va_list param;
+
+	va_start(param, format);
+	dropbear_tracelevel(3, format, param);
+	va_end(param);
+}
+#endif
+#if (DEBUG_TRACE>=4)
+void dropbear_trace4(const char* format, ...) {
+	va_list param;
+
+	va_start(param, format);
+	dropbear_tracelevel(4, format, param);
+	va_end(param);
+}
+#endif
+#if (DEBUG_TRACE>=5)
+void dropbear_trace5(const char* format, ...) {
+	va_list param;
+
+	va_start(param, format);
+	dropbear_tracelevel(5, format, param);
+	va_end(param);
+}
+#endif
+#endif
+
 
 /* Connect to a given unix socket. The socket is blocking */
 #if ENABLE_CONNECT_UNIX
@@ -250,6 +280,12 @@ int spawn_command(void(*exec_fn)(const void *user_data), const void *exec_data,
 
 	const int FDIN = 0;
 	const int FDOUT = 1;
+
+#if DROPBEAR_FUZZ
+	if (fuzz.fuzzing) {
+		return fuzz_spawn_command(ret_writefd, ret_readfd, ret_errfd, ret_pid);
+	}
+#endif
 
 	/* redirect stdin/stdout/stderr */
 	if (pipe(infds) != 0) {
@@ -373,25 +409,43 @@ void run_shell_command(const char* cmd, unsigned int maxfd, char* usershell) {
 
 #if DEBUG_TRACE
 void printhex(const char * label, const unsigned char * buf, int len) {
-
-	int i;
+	int i, j;
 
 	fprintf(stderr, "%s\n", label);
-	for (i = 0; i < len; i++) {
-		fprintf(stderr, "%02x", buf[i]);
-		if (i % 16 == 15) {
-			fprintf(stderr, "\n");
+	/* for each 16 byte line */
+	for (j = 0; j < len; j += 16) {
+		const int linelen = MIN(16, len - j);
+
+		/* print hex digits */
+		for (i = 0; i < 16; i++) {
+			if (i < linelen) {
+				fprintf(stderr, "%02x", buf[j+i]);
+			} else {
+				fprintf(stderr, "  ");
+			}
+			// separator between pairs
+			if (i % 2 ==1) {
+				fprintf(stderr, " ");
+			}
 		}
-		else if (i % 2 == 1) {
-			fprintf(stderr, " ");
+
+		/* print characters */
+		fprintf(stderr, "  ");
+		for (i = 0; i < linelen; i++) {
+			char c = buf[j+i];
+			if (!isprint(c)) {
+				c = '.';
+			}
+			fputc(c, stderr);
 		}
+		fprintf(stderr, "\n");
 	}
-	fprintf(stderr, "\n");
 }
 
 void printmpint(const char *label, mp_int *mp) {
 	buffer *buf = buf_new(1000);
 	buf_putmpint(buf, mp);
+	fprintf(stderr, "%d bits ", mp_count_bits(mp));
 	printhex(label, buf->data, buf->len);
 	buf_free(buf);
 
@@ -520,48 +574,15 @@ void m_close(int fd) {
 	}
 }
 	
-void * m_malloc(size_t size) {
-
-	void* ret;
-
-	if (size == 0) {
-		dropbear_exit("m_malloc failed");
-	}
-	ret = calloc(1, size);
-	if (ret == NULL) {
-		dropbear_exit("m_malloc failed");
-	}
-	return ret;
-
-}
-
-void * m_strdup(const char * str) {
-	char* ret;
-
-	ret = strdup(str);
-	if (ret == NULL) {
-		dropbear_exit("m_strdup failed");
-	}
-	return ret;
-}
-
-void * m_realloc(void* ptr, size_t size) {
-
-	void *ret;
-
-	if (size == 0) {
-		dropbear_exit("m_realloc failed");
-	}
-	ret = realloc(ptr, size);
-	if (ret == NULL) {
-		dropbear_exit("m_realloc failed");
-	}
-	return ret;
-}
-
 void setnonblocking(int fd) {
 
 	TRACE(("setnonblocking: %d", fd))
+
+#if DROPBEAR_FUZZ
+	if (fuzz.fuzzing) {
+		return;
+	}
+#endif
 
 	if (fcntl(fd, F_SETFL, O_NONBLOCK) < 0) {
 		if (errno == ENODEV) {
@@ -569,23 +590,37 @@ void setnonblocking(int fd) {
 			 * can't be set to non-blocking */
 			TRACE(("ignoring ENODEV for setnonblocking"))
 		} else {
+		{
 			dropbear_exit("Couldn't set nonblocking");
+		}
 		}
 	}
 	TRACE(("leave setnonblocking"))
 }
 
 void disallow_core() {
-	struct rlimit lim;
-	lim.rlim_cur = lim.rlim_max = 0;
-	setrlimit(RLIMIT_CORE, &lim);
+	struct rlimit lim = {0};
+	if (getrlimit(RLIMIT_CORE, &lim) < 0) {
+		TRACE(("getrlimit(RLIMIT_CORE) failed"));
+	}
+	lim.rlim_cur = 0;
+	if (setrlimit(RLIMIT_CORE, &lim) < 0) {
+		TRACE(("setrlimit(RLIMIT_CORE) failed"));
+	}
 }
 
 /* Returns DROPBEAR_SUCCESS or DROPBEAR_FAILURE, with the result in *val */
 int m_str_to_uint(const char* str, unsigned int *val) {
 	unsigned long l;
-	errno = 0;
-	l = strtoul(str, NULL, 10);
+	char *endp;
+
+	l = strtoul(str, &endp, 10);
+
+	if (endp == str || *endp != '\0') {
+		/* parse error */
+		return DROPBEAR_FAILURE;
+	}
+
 	/* The c99 spec doesn't actually seem to define EINVAL, but most platforms
 	 * I've looked at mention it in their manpage */
 	if ((l == 0 && errno == EINVAL)
@@ -598,16 +633,24 @@ int m_str_to_uint(const char* str, unsigned int *val) {
 	}
 }
 
-/* Returns malloced path. inpath beginning with '/' is returned as-is,
-otherwise home directory is prepended */
+/* Returns malloced path. inpath beginning with '~/' expanded,
+   otherwise returned as-is */
 char * expand_homedir_path(const char *inpath) {
 	struct passwd *pw = NULL;
-	if (inpath[0] != '/') {
-		pw = getpwuid(getuid());
-		if (pw && pw->pw_dir) {
-			int len = strlen(inpath) + strlen(pw->pw_dir) + 2;
+	if (strncmp(inpath, "~/", 2) == 0) {
+		char *homedir = getenv("HOME");
+
+		if (!homedir) {
+			pw = getpwuid(getuid());
+			if (pw) {
+				homedir = pw->pw_dir;
+			}
+		}
+
+		if (homedir) {
+			int len = strlen(inpath)-2 + strlen(homedir) + 2;
 			char *buf = m_malloc(len);
-			snprintf(buf, len, "%s/%s", pw->pw_dir, inpath);
+			snprintf(buf, len, "%s/%s", homedir, inpath+2);
 			return buf;
 		}
 	}
@@ -628,61 +671,67 @@ int constant_time_memcmp(const void* a, const void *b, size_t n)
 	return c;
 }
 
-#if defined(__linux__) && defined(SYS_clock_gettime)
-/* CLOCK_MONOTONIC_COARSE was added in Linux 2.6.32 but took a while to
-reach userspace include headers */
-#ifndef CLOCK_MONOTONIC_COARSE
-#define CLOCK_MONOTONIC_COARSE 6
+/* higher-resolution monotonic timestamp, falls back to gettimeofday */
+void gettime_wrapper(struct timespec *now) {
+	struct timeval tv;
+#if DROPBEAR_FUZZ
+	if (fuzz.fuzzing) {
+		/* time stands still when fuzzing */
+		now->tv_sec = 5;
+		now->tv_nsec = 0;
+	}
 #endif
-/* Some old toolchains know SYS_clock_gettime but not CLOCK_MONOTONIC */
-#ifndef CLOCK_MONOTONIC
-#define CLOCK_MONOTONIC 1
+
+#if defined(HAVE_CLOCK_GETTIME) && defined(CLOCK_MONOTONIC)
+	/* POSIX monotonic clock. Newer Linux, BSD, MacOSX >10.12 */
+	if (clock_gettime(CLOCK_MONOTONIC, now) == 0) {
+		return;
+	}
 #endif
-static clockid_t get_linux_clock_source() {
-	struct timespec ts;
-	if (syscall(SYS_clock_gettime, CLOCK_MONOTONIC_COARSE, &ts) == 0) {
-		return CLOCK_MONOTONIC_COARSE;
-	}
 
-	if (syscall(SYS_clock_gettime, CLOCK_MONOTONIC, &ts) == 0) {
-		return CLOCK_MONOTONIC;
-	}
-	return -1;
-}
-#endif 
-
-time_t monotonic_now() {
 #if defined(__linux__) && defined(SYS_clock_gettime)
-	static clockid_t clock_source = -2;
-
-	if (clock_source == -2) {
-		/* First run, find out which one works. 
-		-1 will fall back to time() */
-		clock_source = get_linux_clock_source();
-	}
-
-	if (clock_source >= 0) {
-		struct timespec ts;
-		if (syscall(SYS_clock_gettime, clock_source, &ts) != 0) {
-			/* Intermittent clock failures should not happen */
-			dropbear_exit("Clock broke");
+	{
+	/* Old linux toolchain - kernel might support it but not the build headers */
+	/* Also glibc <2.17 requires -lrt which we neglect to add */
+	static int linux_monotonic_failed = 0;
+	if (!linux_monotonic_failed) {
+		/* CLOCK_MONOTONIC isn't in some headers */
+		int clock_source_monotonic = 1; 
+		if (syscall(SYS_clock_gettime, clock_source_monotonic, now) == 0) {
+			return;
+		} else {
+			/* Don't try again */
+			linux_monotonic_failed = 1;
 		}
-		return ts.tv_sec;
 	}
-#endif /* linux clock_gettime */
+	}
+#endif /* linux fallback clock_gettime */
 
 #if defined(HAVE_MACH_ABSOLUTE_TIME)
-	/* OS X, see https://developer.apple.com/library/mac/qa/qa1398/_index.html */
+	{
+	/* OS X pre 10.12, see https://developer.apple.com/library/mac/qa/qa1398/_index.html */
 	static mach_timebase_info_data_t timebase_info;
+	uint64_t scaled_time;
 	if (timebase_info.denom == 0) {
 		mach_timebase_info(&timebase_info);
 	}
-	return mach_absolute_time() * timebase_info.numer / timebase_info.denom
-		/ 1e9;
+	scaled_time = mach_absolute_time() * timebase_info.numer / timebase_info.denom;
+	now->tv_sec = scaled_time / 1000000000;
+	now->tv_nsec = scaled_time % 1000000000;
+	}
 #endif /* osx mach_absolute_time */
 
 	/* Fallback for everything else - this will sometimes go backwards */
-	return time(NULL);
+	gettimeofday(&tv, NULL);
+	now->tv_sec = tv.tv_sec;
+	now->tv_nsec = 1000*tv.tv_usec;
+}
+
+/* second-resolution monotonic timestamp */
+time_t monotonic_now() {
+	struct timespec ts;
+	gettime_wrapper(&ts);
+	return ts.tv_sec;
 }
 
 void fsync_parent_dir(const char* fn) {
@@ -700,6 +749,38 @@ void fsync_parent_dir(const char* fn) {
 		TRACE(("error opening directory %s for fsync: %s", dir, strerror(errno)))
 	}
 
-	free(fn_dir);
+	m_free(fn_dir);
 #endif
+}
+
+int fd_read_pending(int fd) {
+	fd_set fds;
+	struct timeval timeout;
+
+	DROPBEAR_FD_ZERO(&fds);
+	FD_SET(fd, &fds);
+	while (1) {
+		timeout.tv_sec = 0;
+		timeout.tv_usec = 0;
+		if (select(fd+1, &fds, NULL, NULL, &timeout) < 0) {
+			if (errno == EINTR) {
+				continue;
+			}
+			return 0;
+		}
+		return FD_ISSET(fd, &fds);
+	}
+}
+
+int m_snprintf(char *str, size_t size, const char *format, ...) {
+	va_list param;
+	int ret;
+
+	va_start(param, format);
+	ret = vsnprintf(str, size, format, param);
+	va_end(param);
+	if (ret < 0) {
+		dropbear_exit("snprintf failed");
+	}
+	return ret;
 }

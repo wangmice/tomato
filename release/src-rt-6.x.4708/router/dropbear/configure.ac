@@ -5,10 +5,18 @@
 # of the platform checks have been taken straight from OpenSSH's configure.ac
 # Huge thanks to them for dealing with the horrible platform-specifics :)
 
-AC_PREREQ(2.59)
+AC_PREREQ([2.59])
 AC_INIT
 AC_CONFIG_SRCDIR(buffer.c)
 
+# Record which revision is being built
+if test -s "`which hg`" && test -d "$srcdir/.hg"; then
+	hgrev=`hg id -i -R "$srcdir"`
+	AC_MSG_NOTICE([Source directory Mercurial base revision $hgrev])
+fi
+
+ORIGCFLAGS="$CFLAGS"
+LATE_CFLAGS=""
 # Checks for programs.
 AC_PROG_CC
 
@@ -29,7 +37,7 @@ AC_DEFUN(DB_TRYADDCFLAGS,
 }])
 
 # set compile flags prior to other tests
-if test -z "$OLDCFLAGS" && test "$GCC" = "yes"; then
+if test -z "$ORIGCFLAGS" && test "$GCC" = "yes"; then
 	AC_MSG_NOTICE(No \$CFLAGS set... using "-Os -W -Wall" for GCC)
 	CFLAGS="-Os -W -Wall"
 fi
@@ -39,6 +47,9 @@ DB_TRYADDCFLAGS([-Wno-pointer-sign])
 
 AC_MSG_NOTICE([Checking if compiler '$CC' supports -fno-strict-overflow])
 DB_TRYADDCFLAGS([-fno-strict-overflow])
+
+# needed for various extensions. define early before autoconf tests
+AC_DEFINE([_GNU_SOURCE], [], [Use GNU extensions if glibc])
 
 STATIC=0
 AC_ARG_ENABLE(static,
@@ -63,59 +74,23 @@ AC_ARG_ENABLE(harden,
 
 if test "$hardenbuild" -eq 1; then
 	AC_MSG_NOTICE(Checking for available hardened build flags:)
-	# relocation flags don't make sense for static builds
-	if test "$STATIC" -ne 1; then
-		# pie
-		DB_TRYADDCFLAGS([-fPIE])
-
-		OLDLDFLAGS="$LDFLAGS"
-		TESTFLAGS="-Wl,-pie"
-		LDFLAGS="$LDFLAGS $TESTFLAGS"
-		AC_LINK_IFELSE([AC_LANG_PROGRAM([])], 
-			[AC_MSG_NOTICE([Setting $TESTFLAGS])], 
-			[
-				LDFLAGS="$OLDLDFLAGS"
-				TESTFLAGS="-pie"
-				LDFLAGS="$LDFLAGS $TESTFLAGS"
-				AC_LINK_IFELSE([AC_LANG_PROGRAM([])], 
-					[AC_MSG_NOTICE([Setting $TESTFLAGS])], 
-					[AC_MSG_NOTICE([Not setting $TESTFLAGS]); LDFLAGS="$OLDLDFLAGS" ]
-					)
-			]
-			)
-		# readonly elf relocation sections (relro)
-		OLDLDFLAGS="$LDFLAGS"
-		TESTFLAGS="-Wl,-z,now -Wl,-z,relro"
-		LDFLAGS="$LDFLAGS $TESTFLAGS"
-		AC_LINK_IFELSE([AC_LANG_PROGRAM([])], 
-			[AC_MSG_NOTICE([Setting $TESTFLAGS])], 
-			[AC_MSG_NOTICE([Not setting $TESTFLAGS]); LDFLAGS="$OLDLDFLAGS" ]
-			)
-	fi # non-static
-	# stack protector. -strong is good but only in gcc 4.9 or later
-	OLDCFLAGS="$CFLAGS"
-	TESTFLAGS="-fstack-protector-strong"
-	CFLAGS="$CFLAGS $TESTFLAGS"
-	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([])], 
-	    [AC_MSG_NOTICE([Setting $TESTFLAGS])], 
-	    [
-			CFLAGS="$OLDCFLAGS"
-			TESTFLAGS="-fstack-protector --param=ssp-buffer-size=4"
-			CFLAGS="$CFLAGS $TESTFLAGS"
-			AC_COMPILE_IFELSE([AC_LANG_PROGRAM([])], 
-			    [AC_MSG_NOTICE([Setting $TESTFLAGS])], 
-			    [AC_MSG_NOTICE([Not setting $TESTFLAGS]); CFLAGS="$OLDCFLAGS" ]
-			    )
-	    ]
-	    )
-	# FORTIFY_SOURCE
-	DB_TRYADDCFLAGS([-D_FORTIFY_SOURCE=2])
 
 	# Spectre v2 mitigations
 	DB_TRYADDCFLAGS([-mfunction-return=thunk])
 	DB_TRYADDCFLAGS([-mindirect-branch=thunk])
 
 fi
+
+AC_ARG_ENABLE(werror,
+	[  --enable-werror         Set -Werror when building],
+	[
+		if test "x$enableval" = "xyes"; then
+			# -Werror shouldn't be set when configure runs tests.
+			# We add it to the Makefile's CFLAGS
+			LATE_CFLAGS+="$LATE_CFLAGS -Werror"
+			AC_MSG_NOTICE(Enabling -Werror)
+		fi
+	], [])
 
 # large file support is useful for scp
 AC_SYS_LARGEFILE
@@ -315,16 +290,56 @@ AC_ARG_ENABLE(shadow,
 		AC_MSG_NOTICE(Using shadow passwords if available)
 	]
 )
-			
+
+AC_ARG_ENABLE(plugin,
+	[  --enable-plugin         Enable support for External Public Key Authentication plug-in],
+	[
+		AC_DEFINE(DROPBEAR_PLUGIN, 1, External Public Key Authentication)
+		AC_MSG_NOTICE(Enabling support for External Public Key Authentication)
+		DROPBEAR_PLUGIN=1
+	],
+	[
+		AC_DEFINE(DROPBEAR_PLUGIN, 0, External Public Key Authentication)
+		DROPBEAR_PLUGIN=0
+	]
+
+)
+AC_SUBST(DROPBEAR_PLUGIN)
+
+AC_ARG_ENABLE(fuzz,
+	[  --enable-fuzz           Build fuzzing. Not recommended for deployment.],
+	[
+		if test "x$enableval" = "xyes"; then
+            AC_DEFINE(DROPBEAR_FUZZ, 1, Fuzzing)
+            AC_MSG_NOTICE(Enabling fuzzing)
+            DROPBEAR_FUZZ=1
+            # libfuzzer needs linking with c++ libraries
+            AC_PROG_CXX
+			mkdir -pv fuzz
+        else
+            AC_DEFINE(DROPBEAR_FUZZ, 0, Fuzzing)
+            AC_MSG_NOTICE(Disabling fuzzing)
+            DROPBEAR_FUZZ=0
+        fi
+	],
+	[
+		AC_DEFINE(DROPBEAR_FUZZ, 0, Fuzzing)
+		AC_MSG_NOTICE(Disabling fuzzing)
+		DROPBEAR_FUZZ=0
+	]
+
+)
+AC_SUBST(DROPBEAR_FUZZ)
+AC_SUBST(CXX)
 
 # Checks for header files.
-AC_HEADER_STDC
 AC_HEADER_SYS_WAIT
 AC_CHECK_HEADERS([netinet/in.h netinet/tcp.h \
 	crypt.h \
 	pty.h libutil.h libgen.h inttypes.h stropts.h utmp.h \
 	utmpx.h lastlog.h paths.h util.h netdb.h security/pam_appl.h \
-	pam/pam_appl.h netinet/in_systm.h sys/uio.h linux/pkt_sched.h])
+	pam/pam_appl.h netinet/in_systm.h sys/uio.h linux/pkt_sched.h \
+	sys/random.h sys/prctl.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_C_CONST
@@ -332,7 +347,6 @@ AC_TYPE_UID_T
 AC_TYPE_MODE_T
 AC_TYPE_PID_T
 AC_TYPE_SIZE_T
-AC_HEADER_TIME
 
 AC_CHECK_TYPES([uint8_t, u_int8_t, uint16_t, u_int16_t, uint32_t, u_int32_t])
 AC_CHECK_TYPES([struct sockaddr_storage])
@@ -473,32 +487,36 @@ AC_CHECK_FUNCS(endutxent getutxent getutxid getutxline pututxline )
 AC_CHECK_FUNCS(setutxent utmpxname)
 AC_CHECK_FUNCS(logout updwtmp logwtmp)
 
+# POSIX monotonic time
+AC_CHECK_FUNCS(clock_gettime)
+
 # OS X monotonic time
 AC_CHECK_HEADERS([mach/mach_time.h])
 AC_CHECK_FUNCS(mach_absolute_time)
 
-AC_CHECK_FUNCS(explicit_bzero memset_s)
+AC_CHECK_FUNCS(explicit_bzero memset_s getrandom)
 
 AC_ARG_ENABLE(bundled-libtom,
 [  --enable-bundled-libtom       Force using bundled libtomcrypt/libtommath even if a system version exists.
   --disable-bundled-libtom      Force using system libtomcrypt/libtommath, fail if it does not exist.
-                                Default is to use system if available, otherwise bundled.],
+                                Default is to use system if available, otherwise bundled.
+                                Dropbear requires system libtommath >= 1.2.0 and libtomcrypt >= 1.18.0],
 	[
 		if test "x$enableval" = "xyes"; then
 			BUNDLED_LIBTOM=1
 			AC_MSG_NOTICE(Forcing bundled libtom*)
 		else
 			BUNDLED_LIBTOM=0
-			AC_CHECK_LIB(tommath, mp_exptmod, LIBTOM_LIBS="-ltommath $LIBTOM_LIBS",
-				[AC_MSG_ERROR([Missing system libtommath and --disable-bundled-libtom was specified])] )
-			AC_CHECK_LIB(tomcrypt, register_cipher, LIBTOM_LIBS="-ltomcrypt $LIBTOM_LIBS",
-				[AC_MSG_ERROR([Missing system libtomcrypt and --disable-bundled-libtom was specified])] )
+			AC_CHECK_LIB(tommath, mp_to_ubin, LIBTOM_LIBS="-ltommath $LIBTOM_LIBS",
+				[AC_MSG_ERROR([Missing/old system libtommath and --disable-bundled-libtom was specified])] )
+			AC_CHECK_LIB(tomcrypt, poly1305_init, LIBTOM_LIBS="-ltomcrypt $LIBTOM_LIBS",
+				[AC_MSG_ERROR([Missing/old system libtomcrypt and --disable-bundled-libtom was specified])] )
 		fi
 	],
 	[
 		BUNDLED_LIBTOM=0
-		AC_CHECK_LIB(tommath, mp_exptmod, LIBTOM_LIBS="-ltommath $LIBTOM_LIBS", BUNDLED_LIBTOM=1)
-		AC_CHECK_LIB(tomcrypt, register_cipher, LIBTOM_LIBS="-ltomcrypt $LIBTOM_LIBS", BUNDLED_LIBTOM=1)
+		AC_CHECK_LIB(tommath, mp_to_ubin, LIBTOM_LIBS="-ltommath $LIBTOM_LIBS", BUNDLED_LIBTOM=1)
+		AC_CHECK_LIB(tomcrypt, poly1305_init, LIBTOM_LIBS="-ltomcrypt $LIBTOM_LIBS", BUNDLED_LIBTOM=1)
 	]
 )
 
@@ -776,7 +794,7 @@ AC_FUNC_MEMCMP
 AC_FUNC_SELECT_ARGTYPES
 AC_CHECK_FUNCS([getpass getspnam getusershell putenv])
 AC_CHECK_FUNCS([clearenv strlcpy strlcat daemon basename _getpty getaddrinfo ])
-AC_CHECK_FUNCS([freeaddrinfo getnameinfo fork writev getgrouplist])
+AC_CHECK_FUNCS([freeaddrinfo getnameinfo fork writev getgrouplist fexecve])
 
 AC_SEARCH_LIBS(basename, gen, AC_DEFINE(HAVE_BASENAME))
 
@@ -808,8 +826,11 @@ if test $BUNDLED_LIBTOM = 1 ; then
 LIBTOM_FILES="libtomcrypt/Makefile libtommath/Makefile"
 fi
 
-AC_CONFIG_HEADER(config.h)
-AC_CONFIG_FILES(Makefile $LIBTOM_FILES)
+# flags that should be set in Makefile but not for configure tests
+CFLAGS="$CFLAGS $LATE_CFLAGS"
+
+AC_CONFIG_HEADERS([config.h])
+AC_CONFIG_FILES(Makefile $LIBTOM_FILES test/Makefile)
 AC_OUTPUT
 
 AC_MSG_NOTICE()
@@ -831,4 +852,4 @@ AC_MSG_NOTICE([crypt() not available, dropbear server will not have password aut
 fi
 
 AC_MSG_NOTICE()
-AC_MSG_NOTICE([Now edit options.h to choose features.])
+AC_MSG_NOTICE([Now edit localoptions.h to choose features.])
