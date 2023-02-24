@@ -1133,7 +1133,7 @@ endif
 	@echo "distclean    distclean of Linux & busybox (but preserve .configs)"
 	@echo "prepk        -C Linux oldconfig dep"
 
-libmnl ipset ipset6 busybox cyassl dnscrypt dnsmasq e2fsprogs hotplug2 httpd iptables-1.4.x layer7 libbcm libbcmcrypto libcurl libevent libexif libid3tag libjson-c libncurses libnfnetlink libnfsidmap libpcap libsodium libusb libxml2 minidlna miniupnpd mysql nano nas_arm nettle nfs-utils nginx ntfs-3g openssl openvpn pcre php portmap pppd pptpd rp-l2tp rp-pppoe rstats samba samba-3.5.8 samba3 spawn-fcgi sqlite transmission udpxy usbmodeswitch vlan vsftpd xl2tpd tinc apcupsd:
+dropbear libmnl ipset ipset6 busybox cyassl dnscrypt dnsmasq e2fsprogs hotplug2 httpd iptables-1.4.x layer7 libbcm libbcmcrypto libcurl libevent libexif libid3tag libjson-c libncurses libnfnetlink libnfsidmap libpcap libsodium libusb libxml2 minidlna miniupnpd mysql nano nas_arm nettle nfs-utils nginx ntfs-3g openssl openvpn pcre php portmap pppd pptpd rp-l2tp rp-pppoe rstats samba samba-3.5.8 samba3 spawn-fcgi sqlite transmission udpxy usbmodeswitch vlan vsftpd xl2tpd tinc apcupsd:
 	@$(MAKE) -C router $@
 
 .PHONY: all clean distclean cleanimage cleantools cleankernel prepk what setprofile help
