@@ -3081,6 +3081,7 @@ tv(void)
 {
     unsigned char      *ad;
     unsigned char      *ciphertext;
+    unsigned char      *ciphertext2;
     unsigned char      *decrypted;
     unsigned char      *detached_ciphertext;
     unsigned char      *expected_ciphertext;
@@ -3145,8 +3146,8 @@ tv(void)
             memcmp(mac, expected_ciphertext + message_len,
                    crypto_aead_aes256gcm_ABYTES) != 0) {
             printf("Detached encryption of test vector #%u failed\n", (unsigned int) i);
-            hex = (char *) sodium_malloc((size_t) found_ciphertext_len * 2 + 1);
-            sodium_bin2hex(hex, (size_t) found_ciphertext_len * 2 + 1,
+            hex = (char *) sodium_malloc((size_t) ciphertext_len * 2 + 1);
+            sodium_bin2hex(hex, (size_t) ciphertext_len * 2 + 1,
                            ciphertext, ciphertext_len);
             printf("Computed: [%s]\n", hex);
             sodium_free(hex);
@@ -3170,7 +3171,7 @@ tv(void)
         found_message_len = 1;
         if (crypto_aead_aes256gcm_decrypt(decrypted, &found_message_len,
                                           NULL, ciphertext,
-                                          randombytes_uniform(ciphertext_len),
+                                          randombytes_uniform((uint32_t) ciphertext_len),
                                           ad, ad_len, nonce, key) != -1) {
             printf("Verification of test vector #%u after truncation succeeded\n",
                    (unsigned int) i);
@@ -3179,11 +3180,16 @@ tv(void)
             printf("Message length should have been set to zero after a failure\n");
         }
         if (crypto_aead_aes256gcm_decrypt(decrypted, &found_message_len,
-                                          NULL, NULL,
+                                          NULL, guard_page,
                                           randombytes_uniform(crypto_aead_aes256gcm_ABYTES),
                                           ad, ad_len, nonce, key) != -1) {
             printf("Verification of test vector #%u with a truncated tag failed\n",
                    (unsigned int) i);
+        }
+        if (i == 0 && crypto_aead_aes256gcm_decrypt(NULL, NULL,
+                                                    NULL, ciphertext, ciphertext_len,
+                                                    ad, ad_len, nonce, key) != 0) {
+            printf("Verification of test vector #%u's tag failed\n", (unsigned int) i);
         }
         if (crypto_aead_aes256gcm_decrypt(decrypted, &found_message_len,
                                           NULL, ciphertext, ciphertext_len,
@@ -3205,6 +3211,32 @@ tv(void)
             printf("Incorrect decryption of test vector #%u\n", (unsigned int) i);
         }
 
+        ciphertext2 = (unsigned char *) sodium_malloc(ciphertext_len);
+        crypto_aead_aes256gcm_encrypt(ciphertext, &found_ciphertext_len, message,
+                                      message_len, ad, ad_len, NULL, nonce, key);
+        assert(found_ciphertext_len == ciphertext_len);
+        memcpy(ciphertext2, message, message_len);
+        crypto_aead_aes256gcm_encrypt(ciphertext2, &found_ciphertext_len,
+                                      ciphertext2, message_len, ad, ad_len, NULL,
+                                      nonce, key);
+        assert(found_ciphertext_len == ciphertext_len);
+        assert(memcmp(ciphertext, ciphertext2, ciphertext_len) == 0);
+        if (crypto_aead_aes256gcm_decrypt(ciphertext2, &found_message_len, NULL,
+                                          ciphertext2, ciphertext_len, ad, ad_len,
+                                          nonce, key) != 0) {
+            printf("In-place decryption of vector #%u failed\n", (unsigned int) i);
+        }
+        assert(found_message_len == message_len);
+        assert(memcmp(ciphertext2, message, message_len) == 0);
+        if (crypto_aead_aes256gcm_decrypt(message, &found_message_len, NULL,
+                                          ciphertext, ciphertext_len, ad, ad_len,
+                                          nonce, key) != 0) {
+            printf("Decryption of vector #%u failed\n", (unsigned int) i);
+        }
+        assert(found_message_len == message_len);
+        assert(memcmp(ciphertext2, message, message_len) == 0);
+
+        sodium_free(ciphertext2);
         sodium_free(message);
         sodium_free(ad);
         sodium_free(expected_ciphertext);
@@ -3220,17 +3252,61 @@ tv(void)
     return 0;
 }
 
+static int
+tv2(void)
+{
+    unsigned char *ciphertext;
+    unsigned char *message;
+    unsigned char *message2;
+    unsigned char *nonce;
+    unsigned char *key;
+    size_t         message_len;
+    size_t         ciphertext_len;
+    int            i;
+
+    for (i = 0; i < 250; i++) {
+        message_len = randombytes_uniform(1000);
+        ciphertext_len = message_len + crypto_aead_aes256gcm_ABYTES;
+        message = (unsigned char *) sodium_malloc(message_len);
+        message2 = (unsigned char *) sodium_malloc(message_len);
+        ciphertext = (unsigned char *) sodium_malloc(ciphertext_len);
+        nonce = (unsigned char *) sodium_malloc(crypto_aead_aes256gcm_NPUBBYTES);
+        key = (unsigned char *) sodium_malloc(crypto_aead_aes256gcm_KEYBYTES);
+
+        crypto_aead_aes256gcm_keygen(key);
+        randombytes_buf(nonce, crypto_aead_aes256gcm_NPUBBYTES);
+        randombytes_buf(message, message_len);
+        crypto_aead_aes256gcm_encrypt(ciphertext, NULL, message, message_len,
+                                      NULL, 0, NULL, nonce, key);
+        if (crypto_aead_aes256gcm_decrypt(message2, NULL, NULL,
+                                          ciphertext, ciphertext_len,
+                                          NULL, 0, nonce, key) != 0) {
+            printf("Decryption of random ciphertext failed");
+        }
+        assert(message_len == 0 || memcmp(message, message2, message_len) == 0);
+        sodium_free(key);
+        sodium_free(nonce);
+        sodium_free(ciphertext);
+        sodium_free(message2);
+        sodium_free(message);
+    }
+
+    return 0;
+}
+
 int
 main(void)
 {
     if (crypto_aead_aes256gcm_is_available()) {
         tv();
+        tv2();
     }
     assert(crypto_aead_aes256gcm_keybytes() == crypto_aead_aes256gcm_KEYBYTES);
     assert(crypto_aead_aes256gcm_nsecbytes() == crypto_aead_aes256gcm_NSECBYTES);
     assert(crypto_aead_aes256gcm_npubbytes() == crypto_aead_aes256gcm_NPUBBYTES);
     assert(crypto_aead_aes256gcm_abytes() == crypto_aead_aes256gcm_ABYTES);
     assert(crypto_aead_aes256gcm_statebytes() >= sizeof(crypto_aead_aes256gcm_state));
+    assert(crypto_aead_aes256gcm_messagebytes_max() == crypto_aead_aes256gcm_MESSAGEBYTES_MAX);
     printf("OK\n");
 
     return 0;

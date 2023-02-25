@@ -7,7 +7,6 @@
 
 #include "blake2.h"
 #include "private/common.h"
-#include "private/sse2_64_32.h"
 
 #if defined(HAVE_EMMINTRIN_H) && defined(HAVE_TMMINTRIN_H) && \
     defined(HAVE_SMMINTRIN_H)
@@ -18,11 +17,12 @@
 #  pragma GCC target("sse4.1")
 # endif
 
-#include <emmintrin.h>
-#include <smmintrin.h>
-#include <tmmintrin.h>
+# include <emmintrin.h>
+# include <smmintrin.h>
+# include <tmmintrin.h>
+# include "private/sse2_64_32.h"
 
-#include "blake2b-compress-sse41.h"
+# include "blake2b-compress-sse41.h"
 
 CRYPTO_ALIGN(64)
 static const uint64_t blake2b_IV[8] = {

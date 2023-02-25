@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "core.h"
 #include "crypto_stream_chacha20.h"
 #include "private/common.h"
 #include "utils.h"
@@ -84,15 +85,12 @@ chacha20_encrypt_bytes(chacha_ctx *ctx, const uint8_t *m, uint8_t *c,
         x15;
     uint32_t j0, j1, j2, j3, j4, j5, j6, j7, j8, j9, j10, j11, j12, j13, j14,
         j15;
-    uint8_t *    ctarget = NULL;
+    uint8_t     *ctarget = NULL;
     uint8_t      tmp[64];
     unsigned int i;
 
     if (!bytes) {
         return; /* LCOV_EXCL_LINE */
-    }
-    if (bytes > 64ULL * (1ULL << 32) - 64ULL) {
-        abort();
     }
     j0  = ctx->input[0];
     j1  = ctx->input[1];
@@ -242,8 +240,8 @@ stream_ref(unsigned char *c, unsigned long long clen, const unsigned char *n,
 }
 
 static int
-stream_ietf_ref(unsigned char *c, unsigned long long clen,
-                const unsigned char *n, const unsigned char *k)
+stream_ietf_ext_ref(unsigned char *c, unsigned long long clen,
+                    const unsigned char *n, const unsigned char *k)
 {
     struct chacha_ctx ctx;
 
@@ -286,9 +284,9 @@ stream_ref_xor_ic(unsigned char *c, const unsigned char *m,
 }
 
 static int
-stream_ietf_ref_xor_ic(unsigned char *c, const unsigned char *m,
-                       unsigned long long mlen, const unsigned char *n,
-                       uint32_t ic, const unsigned char *k)
+stream_ietf_ext_ref_xor_ic(unsigned char *c, const unsigned char *m,
+                           unsigned long long mlen, const unsigned char *n,
+                           uint32_t ic, const unsigned char *k)
 {
     struct chacha_ctx ctx;
     uint8_t           ic_bytes[4];
@@ -308,7 +306,7 @@ stream_ietf_ref_xor_ic(unsigned char *c, const unsigned char *m,
 struct crypto_stream_chacha20_implementation
     crypto_stream_chacha20_ref_implementation = {
         SODIUM_C99(.stream =) stream_ref,
-        SODIUM_C99(.stream_ietf =) stream_ietf_ref,
+        SODIUM_C99(.stream_ietf_ext =) stream_ietf_ext_ref,
         SODIUM_C99(.stream_xor_ic =) stream_ref_xor_ic,
-        SODIUM_C99(.stream_ietf_xor_ic =) stream_ietf_ref_xor_ic
+        SODIUM_C99(.stream_ietf_ext_xor_ic =) stream_ietf_ext_ref_xor_ic
     };
