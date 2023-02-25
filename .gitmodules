@@ -13,3 +13,6 @@
 [submodule "release/src-rt-6.x.4708/router/tor"]
 	path = release/src-rt-6.x.4708/router/tor
 	url = https://gitlab.torproject.org/tpo/core/tor.git
+[submodule "release/src-rt-6.x.4708/router/nginx"]
+	path = release/src-rt-6.x.4708/router/nginx
+	url = https://github.com/nginx/nginx.git
