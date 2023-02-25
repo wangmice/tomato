@@ -90,7 +90,9 @@ static char filename[PATH_MAX+1] = ".config";
 static int indent = 0;
 static struct termios ios_org;
 static int rows, cols;
+#ifndef LKC_H
 struct menu *current_menu;
+#endif /*LKC_H*/
 static int child_count;
 static int single_menu_mode;
 
