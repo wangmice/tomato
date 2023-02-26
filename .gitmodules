@@ -19,3 +19,6 @@
 [submodule "release/src-rt-6.x.4708/router/libcap-ng"]
 	path = release/src-rt-6.x.4708/router/libcap-ng
 	url = https://github.com/stevegrubb/libcap-ng.git
+[submodule "release/src-rt-6.x.4708/router/openssl"]
+	path = release/src-rt-6.x.4708/router/openssl
+	url = git@github.com:openssl/openssl.git
