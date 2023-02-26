@@ -14,16 +14,18 @@ include common.mak
 
 #TOMATO_EXPERIMENTAL=0
 
-#export PARALLEL_BUILD :=
+ifeq ($(JOBS),)
 export PARALLEL_BUILD := -j`grep -c '^processor' /proc/cpuinfo`
+else
+export PARALLEL_BUILD := -j$(JOBS)
+endif
+
 
 
 #
 #
 #
 SEP=echo "\033[41;1m   $@   \033[0m"
-#ipset_ver:ipset或ipset6二选一
-IPSET_VER := ipset6
 export CFLAGS += -DBCMWPA2
 ifeq ($(TCONFIG_BCMWL6),y)
 export CFLAGS += -DBCMQOS
@@ -218,7 +220,7 @@ obj-y += libnfnetlink
 obj-y += miniupnpd
 #	obj-y += upnp
 obj-$(CONFIG_LINUX26) += libmnl
-obj-$(CONFIG_LINUX26) += $(IPSET_VER)
+obj-$(CONFIG_LINUX26) += ipset
 
 
 #
@@ -2805,7 +2807,7 @@ dnscrypt-clean:
 	-@$(MAKE) -C dnscrypt clean
 	@rm -rf dnscrypt/stamp-h1 dnscrypt/src/dnscrypt-proxy/.deps dnscrypt/Makefile
 
-tor/stamp-h1: openssl zlib libevent liblzma
+tor/stamp-h1: openssl zlib libevent
 	cd $(TOP)/tor && CC=$(CC) STRIP=$(STRIP) \
 	autoreconf -fi && \
 	CFLAGS="-O2 -Wall $(EXTRACFLAGS) -ffunction-sections -fdata-sections -flto" \
@@ -2880,7 +2882,7 @@ libmnl-clean:
 
 # --with-kmod=no --with-kbuild="$(LINUXDIR)" autoreconf &&--with-kmod=yes
 # && autoreconf -i -f &&
-ipset6/stamp-h1: libmnl
+ipset/stamp-h1: libmnl
 	cd $(TOP)/ipset && CC=$(CC) STRIP=$(STRIP) && ./autogen.sh && \
 	CFLAGS="-Os -Wall $(EXTRACFLAGS) -ffunction-sections -fdata-sections" \
 	LDFLAGS="-ffunction-sections -fdata-sections -Wl,--gc-sections" \
@@ -2890,35 +2892,23 @@ ipset6/stamp-h1: libmnl
 	$(CONFIGURE) --prefix=/usr --with-kmod=no
 	touch ipset/stamp-h1
 
-ipset6: ipset6/stamp-h1
+ipset: ipset/stamp-h1
 	$(MAKE) -C ipset
 	$(MAKE) IP_SET_MAX=512 -C ipset KERNEL_DIR=$(LINUXDIR) modules
 
-ipset6-install: ipset6
-	install -D ipset/src/ipset $(INSTALLDIR)/ipset6/usr/sbin/ipset
-	install -d $(INSTALLDIR)/ipset6/usr/lib/
-	install ipset/lib/.libs/libipset.so.3.6.0 $(INSTALLDIR)/ipset6/usr/lib/libipset.so.3.6.0
-	$(STRIP) $(INSTALLDIR)/ipset6/usr/lib/libipset.so.3.6.0
-	$(STRIP) $(INSTALLDIR)/ipset6/usr/sbin/ipset
-	cd $(INSTALLDIR)/ipset6/usr/lib/ && \
+ipset-install: ipset
+	install -D ipset/src/ipset $(INSTALLDIR)/ipset/usr/sbin/ipset
+	install -d $(INSTALLDIR)/ipset/usr/lib/
+	install ipset/lib/.libs/libipset.so.3.6.0 $(INSTALLDIR)/ipset/usr/lib/libipset.so.3.6.0
+	$(STRIP) $(INSTALLDIR)/ipset/usr/lib/libipset.so.3.6.0
+	$(STRIP) $(INSTALLDIR)/ipset/usr/sbin/ipset
+	cd $(INSTALLDIR)/ipset/usr/lib/ && \
 		ln -sf libipset.so.3.6.0 libipset.so.3 && \
 		ln -sf libipset.so.3.6.0 libipset.so
 
-ipset6-clean:
+ipset-clean:
 	-@$(MAKE) -C ipset clean
 	-@rm -rf ipset/Makefile ipset/stamp-h1
-
-#ipset 4.5
-ipset: libmnl
-	$(MAKE) -C ipset KERNEL_DIR=$(LINUXDIR) binaries $(PARALLEL_BUILD)
-
-#ipset 4.5
-ipset-install: ipset
-	install -D ipset/ipset $(INSTALLDIR)/ipset/usr/sbin/ipset
-	install -d $(INSTALLDIR)/ipset/usr/lib/
-	install ipset/*.so $(INSTALLDIR)/ipset/usr/lib/
-	$(STRIP) $(INSTALLDIR)/ipset/usr/lib/*.so
-	$(STRIP) $(INSTALLDIR)/ipset/usr/sbin/ipset
 
 libjson-c/stamp-h1:
 	cd $(TOP)/libjson-c && CC=$(CC) STRIP=$(CROSS_COMPILE)strip \

@@ -22,3 +22,6 @@
 [submodule "release/src-rt-6.x.4708/router/openssl"]
 	path = release/src-rt-6.x.4708/router/openssl
 	url = git@github.com:openssl/openssl.git
+[submodule "release/src-rt-6.x.4708/router/liblzma"]
+	path = release/src-rt-6.x.4708/router/liblzma
+	url = git@github.com:kobolabs/liblzma.git
