@@ -231,7 +231,7 @@ obj-$(TCONFIG_SSH) += dropbear
 #obj-$(TCONFIG_ZEBRA) += zebra
 #	obj-$(TCONFIG_IPP2P) += ipp2p
 obj-$(TCONFIG_LZO) += lzo
-obj-$(TCONFIG_OPENVPN) += openvpn
+obj-$(TCONFIG_OPENVPN) += openvpn libcap-ng
 obj-$(TCONFIG_OPENVPN) += openvpn_plugin_auth_nvram
 obj-$(TCONFIG_TINC) += tinc
 obj-$(TCONFIG_EMF) += emf
@@ -906,6 +906,29 @@ openssl-install: openssl
 	$(STRIP) $(INSTALLDIR)/openssl/usr/lib/libssl.so.3
 	cd $(INSTALLDIR)/openssl/usr/lib && ln -sf libssl.so.3 libssl.so
 #endif
+
+libcap-ng/stamp-h1:
+	@cd libcap-ng && ./autogen.sh && CC=$(CC) AR=$(AR) LD=$(LD) STRIP="$(STRIP)" \
+	CFLAGS="-Os -Wall $(EXTRACFLAGS) -flto" \
+	LDFLAGS="$(LDFLAGS) -Wl,--gc-sections,--as-needed -fPIC" \
+  ac_cv_prog_swig_found=no \
+  $(CONFIGURE) --prefix=/usr --without-python3 --without-python
+	@touch libcap-ng/stamp-h1
+
+libcap-ng: libcap-ng/stamp-h1
+	@$(SEP)
+	@$(MAKE) -C libcap-ng
+
+libcap-ng-clean:
+	@$(MAKE) -C libcap-ng clean
+	@rm -f libcap-ng/stamp-h1
+
+libcap-ng-install:
+	install -D libcap-ng/src/.libs/libcap-ng.so.0.0.0 $(INSTALLDIR)/libcap-ng/usr/lib/libcap-ng.so.0.0.0
+	$(STRIP) -s $(INSTALLDIR)/libcap-ng/usr/lib/libcap-ng.so.0.0.0
+	cd $(INSTALLDIR)/libcap-ng/usr/lib/ && \
+		ln -sf libcap-ng.so.0.0.0 libcap-ng.so.0 && \
+		ln -sf libcap-ng.so.0.0.0 libcap-ng.so
 
 mssl:	openssl
 
@@ -2121,7 +2144,7 @@ php-install: php
 
 nginx/stamp-h1: openssl zlib pcre
 	@$(SEP)
-	cd $(TOP)/nginx && ./configure --crossbuild=Linux::$(ARCH) \
+	cd $(TOP)/nginx && CC=$(CC) LANG=C ./configure --crossbuild=Linux::$(ARCH) \
 		--prefix=/usr \
 		--sbin-path=/usr/sbin \
 		--conf-path=/etc/nginx/nginx.conf \
@@ -2327,25 +2350,28 @@ lzo-install: lzo
 		ln -sf liblzo2.so.2.0.0 liblzo2.so.2 && \
 		ln -sf liblzo2.so.2.0.0 liblzo2.so
 
-openvpn/.conf: openssl lzo
+openvpn/.conf: openssl lzo libcap-ng
 	cd openvpn && aclocal -I m4;libtoolize --copy --force;autoheader;automake -a -c --foreign;autoconf  && \
 	CFLAGS="-O3 -Wall $(EXTRACFLAGS) -ffunction-sections -fdata-sections $(if $(TCONFIG_HTTPS),-I$(TOP)/openssl/include/openssl)" \
 	LDFLAGS="-L$(TOP)/openssl -L$(TOP)/lzo/src/.libs -ffunction-sections -fdata-sections -Wl,--gc-sections  $(if $(TCONFIG_HTTPS),-L$(TOP)/openssl -lcrypto -lssl)" \
-	CPPFLAGS="-I$(TOP)/lzo/include -I$(TOP)/openssl/include -I$(TOP)/shared -I$(SRCBASE)/include" \
+	CPPFLAGS="-I$(TOP)/lzo/include -I$(TOP)/openssl/include -I$(TOP)/shared -I$(SRCBASE)/include -I$(TOP)/libcap-ng/src" \
 	OPENSSL_CRYPTO_CFLAGS="-I$(TOP)/openssl" \
 	OPENSSL_CRYPTO_LIBS="-L$(TOP)/openssl -lcrypto" \
 	OPENSSL_SSL_CFLAGS="-I$(TOP)/openssl/include" \
 	OPENSSL_SSL_LIBS="-L$(TOP)/openssl -lssl" \
 	ac_cv_lib_resolv_gethostbyname=no \
 	IPROUTE="/usr/sbin/ip" IFCONFIG="/sbin/ifconfig" ROUTE="/sbin/route" \
+  LIBCAPNG_CFLAGS="-I$(TOP)/libcap-ng/src" \
+  LIBCAPNG_LIBS="-L$(TOP)/libcap-ng/src/.libs -lcap-ng" \
 	$(CONFIGURE) --prefix="" \
 	--with-crypto-library=openssl \
 	--disable-debug --disable-plugin-auth-pam --disable-plugin-down-root --with-plugindir=/lib --enable-management --disable-small \
-	--enable-iproute2 \
+	--enable-iproute2 -disable-lz4 \
 	--disable-selinux --disable-socks
 	touch openvpn/.conf
 
 openvpn: openvpn/.conf
+	@$(SEP)
 	@$(MAKE) -C openvpn $(PARALLEL_BUILD)
 
 openvpn-clean:

@@ -16,3 +16,6 @@
 [submodule "release/src-rt-6.x.4708/router/nginx"]
 	path = release/src-rt-6.x.4708/router/nginx
 	url = https://github.com/nginx/nginx.git
+[submodule "release/src-rt-6.x.4708/router/libcap-ng"]
+	path = release/src-rt-6.x.4708/router/libcap-ng
+	url = https://github.com/stevegrubb/libcap-ng.git
