@@ -1541,12 +1541,12 @@ dropbear/config.h:
 
 sqlite/stamp-h1:
 	cd sqlite && \
-	autoreconf -fsi && \
+  [ ! -f configure ] && libtoolize -cfi && automake -c -a -f &&  autoconf -i; \
 	CC=$(CC) CFLAGS="-Os $(EXTRACFLAGS) -ffunction-sections -fdata-sections" \
 		LDFLAGS="-ffunction-sections -fdata-sections -Wl,--gc-sections" \
 		$(CONFIGURE) --prefix=/usr --enable-shared --enable-static \
 		--disable-readline --disable-dynamic-extensions --enable-threadsafe
-	touch sqlite/stamp-h1
+	@touch $@
 
 sqlite: sqlite/stamp-h1
 	@$(MAKE) -C sqlite all $(PARALLEL_BUILD)
@@ -1666,6 +1666,7 @@ jpeg/stamp-h1:
 	touch jpeg/stamp-h1
 
 jpeg: jpeg/stamp-h1
+	@$(SEP)
 	@$(MAKE) -C jpeg LIBTOOL="" O=o A=a CC=$(CC) AR2="touch" libjpeg.a libjpeg.so $(PARALLEL_BUILD)
 	install -d $(TOP)/jpeg/staged/include
 	install -d $(TOP)/jpeg/staged/lib
@@ -1677,8 +1678,8 @@ jpeg: jpeg/stamp-h1
 
 jpeg-clean:
 	-@$(MAKE) -C jpeg clean
-	@rm -f jpeg/stamp-h1 jpeg/Makefile
-	@rm -rf jpeg/staged
+	rm -f jpeg/stamp-h1 jpeg/Makefile
+	rm -rf jpeg/staged
 
 jpeg-install: jpeg
 	@$(SEP)
@@ -1719,6 +1720,7 @@ zlib/stamp-h1:
 	touch zlib/stamp-h1
 
 zlib: zlib/stamp-h1
+	@$(SEP)
 	@$(MAKE) -C zlib all
 	@$(MAKE) -C zlib DESTDIR=$(TOP)/zlib/staged install
 
@@ -2007,6 +2009,7 @@ libxml2/stamp-h1:
 	touch $@
 
 libxml2: libxml2/stamp-h1
+	@$(SEP)
 	@$(MAKE) -C libxml2 all $(PARALLEL_BUILD)
 	@$(MAKE) -C libxml2 DESTDIR=$(TOP)/libxml2/staged install
 
@@ -2030,6 +2033,7 @@ libpng/stamp-h1:
 	touch $@
 
 libpng: libpng/stamp-h1
+	@$(SEP)
 	@$(MAKE) -C libpng all $(PARALLEL_BUILD)
 	@$(MAKE) -C libpng DESTDIR=$(TOP)/libpng/staged install
 
@@ -2125,7 +2129,7 @@ php/stamp-h1: pcre zlib libiconv sqlite libxml2 libpng jpeg libcurl
 	--enable-zip \
 	--disable-filter \
 	--with-libxml-dir="$(TOP)/libxml2/staged/usr"
-	@touch php/stamp-h1
+	@touch $@
 
 php: php/stamp-h1
 	@$(SEP)
@@ -2973,4 +2977,4 @@ $(obj-y) $(obj-n) $(obj-clean) $(obj-install): dummy
 
 .PHONY: all clean distclean mrproper install package image
 .PHONY: conf mconf oldconf kconf kmconf config menuconfig oldconfig
-.PHONY: dummy libnet libpcap
+.PHONY: dummy libnet libpcap jpeg
