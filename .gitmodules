@@ -15,13 +15,13 @@
 	url = https://gitlab.torproject.org/tpo/core/tor.git
 [submodule "nginx"]
 	path = release/src-rt-6.x.4708/router/nginx
-	url = git@github.com:/wangmice/nginx
+	url = git@github.com:/wangmice/nginx.git
 [submodule "libcap-ng"]
 	path = release/src-rt-6.x.4708/router/libcap-ng
 	url = https://github.com/stevegrubb/libcap-ng.git
 [submodule "openssl"]
 	path = release/src-rt-6.x.4708/router/openssl
-	url = git@github.com:openssl/openssl.git
+	url = git@github.com:wangmice/openssl.git
 [submodule "liblzma"]
 	path = release/src-rt-6.x.4708/router/liblzma
 	url = git@github.com:kobolabs/liblzma.git
