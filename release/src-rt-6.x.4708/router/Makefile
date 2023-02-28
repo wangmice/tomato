@@ -2670,7 +2670,7 @@ nfs-utils-install: nfs-utils
 	$(STRIP) -s $(INSTALLDIR)/nfs-utils/usr/sbin/mountd
 
 tinc/stamp-h1: openssl zlib lzo
-	@cd tinc && autoreconf -fsi && \
+	@cd tinc && autoreconf -fi && \
 	CC=$(CC) AR=$(AR) RANLIB=$(RANLIB) LD=$(LD) \
 	CFLAGS="-Os -Wall $(EXTRACFLAGS) -fPIC -ffunction-sections -fdata-sections" \
 	LDFLAGS="-ffunction-sections -fdata-sections -Wl,--gc-sections -fPIC" \
