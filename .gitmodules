@@ -1,27 +1,27 @@
-[submodule "release/src-rt-6.x.4708/router/libcurl"]
+[submodule "libcurl"]
 	path = release/src-rt-6.x.4708/router/libcurl
 	url = https://github.com/curl/curl.git
-[submodule "release/src-rt-6.x.4708/router/transmission"]
+[submodule "transmission"]
 	path = release/src-rt-6.x.4708/router/transmission
 	url = git@github.com:transmission/transmission.git
-[submodule "release/src-rt-6.x.4708/router/openvpn"]
+[submodule "openvpn"]
 	path = release/src-rt-6.x.4708/router/openvpn
 	url = git@github.com:/openvpn/openvpn
-[submodule "release/src-rt-6.x.4708/router/tinc"]
+[submodule "tinc"]
 	path = release/src-rt-6.x.4708/router/tinc
 	url = http://tinc-vpn.org/git/tinc
-[submodule "release/src-rt-6.x.4708/router/tor"]
+[submodule "tor"]
 	path = release/src-rt-6.x.4708/router/tor
 	url = https://gitlab.torproject.org/tpo/core/tor.git
-[submodule "release/src-rt-6.x.4708/router/nginx"]
+[submodule "nginx"]
 	path = release/src-rt-6.x.4708/router/nginx
 	url = git@github.com:/wangmice/nginx
-[submodule "release/src-rt-6.x.4708/router/libcap-ng"]
+[submodule "libcap-ng"]
 	path = release/src-rt-6.x.4708/router/libcap-ng
 	url = https://github.com/stevegrubb/libcap-ng.git
-[submodule "release/src-rt-6.x.4708/router/openssl"]
+[submodule "openssl"]
 	path = release/src-rt-6.x.4708/router/openssl
 	url = git@github.com:openssl/openssl.git
-[submodule "release/src-rt-6.x.4708/router/liblzma"]
+[submodule "liblzma"]
 	path = release/src-rt-6.x.4708/router/liblzma
 	url = git@github.com:kobolabs/liblzma.git
