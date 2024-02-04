@@ -26,11 +26,13 @@ CFLAGS ?= -Os
 CFLAGS += -fno-strict-aliasing
 CFLAGS += -fno-common
 CPPFLAGS += -D_GNU_SOURCE
+CFLAGS += -D_GNU_SOURCE
 CFLAGS += -Wall
 CFLAGS += -Wextra -Wstrict-prototypes -Wdeclaration-after-statement
 #CFLAGS += -Wno-missing-field-initializers
 #CFLAGS += -ansi	# iptables headers does use typeof which is a gcc extension
 CC ?= gcc
+CFLAGS += $(EXTRACFLAGS)
 RM = rm -f
 INSTALL = install
 STRIP ?= strip
@@ -155,19 +157,20 @@ endif # ($(TEST),1)
 
 LDLIBS += $(shell $(PKG_CONFIG) --static --libs-only-l libssl)
 
-TEST := $(shell $(PKG_CONFIG) --exists uuid && echo 1)
-ifeq ($(TEST),1)
-LDLIBS += $(shell $(PKG_CONFIG) --static --libs-only-l uuid)
-else
-$(info please install uuid-dev package / libuuid)
-endif # ($(TEST),1)
+#TEST := $(shell $(PKG_CONFIG) --exists uuid && echo 1)
+#ifeq ($(TEST),1)
+#LDLIBS += $(shell $(PKG_CONFIG) --static --libs-only-l uuid)
+#else
+#$(info please install uuid-dev package / libuuid)
+#endif # ($(TEST),1)
 
 TESTUPNPDESCGENOBJS = testupnpdescgen.o upnpdescgen.o
 
-EXECUTABLES = miniupnpd testupnpdescgen testgetifstats \
-              testupnppermissions miniupnpdctl testgetifaddr \
-              testgetroute testasyncsendto testportinuse \
-              testssdppktgen
+EXECUTABLES = miniupnpd
+#testupnpdescgen testgetifstats \
+#              testupnppermissions miniupnpdctl testgetifaddr \
+#              testgetroute testasyncsendto testportinuse \
+#              testssdppktgen
 
 .PHONY:	all clean install depend genuuid
 

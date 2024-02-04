@@ -1880,7 +1880,7 @@ ebtables-clean:
 
 #Roadkill
 spawn-fcgi/stamp-h1:
-	cd spawn-fcgi && autoreconf && CC=$(CC) \
+	cd spawn-fcgi && automake --add-missing && autoreconf && CC=$(CC) \
 	CFLAGS="-Os -Wall $(EXTRACFLAGS) -ffunction-sections -fdata-sections" \
 	LDFLAGS="-ffunction-sections -fdata-sections -Wl,--gc-sections -fPIC" \
 	ac_cv_func_malloc_0_nonnull=yes \
@@ -2473,7 +2473,6 @@ libiconv-install: libiconv
 
 transmission/stamp-h1: openssl libcurl libevent zlib
 	cd transmission && CC=$(CC) STRIP=$(STRIP) \
-		autoreconf && \
 		CFLAGS="-Os -Wall -fno-delete-null-pointer-checks -funit-at-a-time \
 			--param large-function-growth=800 --param max-inline-insns-single=3000 \
 			-ffunction-sections -fdata-sections" \
@@ -2481,7 +2480,7 @@ transmission/stamp-h1: openssl libcurl libevent zlib
 			-L$(TOP)/zlib -L$(TOP)/openssl -L$(TOP)/libcurl/lib/.libs -L$(TOP)/libevent/.libs" \
 		HAVE_CXX=yes \
 		$(CONFIGURE) --target=$(HOST) --host=$(HOST) --build=x86_64-linux-gnu --prefix=/usr --disable-nls \
-			--enable-lightweight --enable-largefile --enable-utp --without-gtk \
+			--enable-lightweight --enable-largefile --enable-utp --without-gtk --disable-dependency-tracking \
 			LIBCURL_CFLAGS="-I$(TOP)/libcurl/include" \
 			LIBCURL_LDFLAGS="-L$(TOP)/libcurl/lib/.libs/" \
 			LIBCURL_LIBS="-lcurl" \
@@ -2712,8 +2711,8 @@ snmp-install: snmp
 apcupsd/stamp-h1:
 	cd apcupsd && touch autoconf/variables.mak && CC=$(CC) STRIP=$(STRIP) \
 	$(MAKE) configure && \
-	CFLAGS="-Os -Wall $(EXTRACFLAGS)" \
-	LDFLAGS="-L$(TOOLCHAIN)/lib -ffunction-sections -fdata-sections" \
+	CFLAGS="-Os -Wall $(EXTRACFLAGS) -ffunction-sections -fdata-sections" \
+	LDFLAGS="-L$(TOOLCHAIN)/lib -ffunction-sections -fdata-sections -Wl,--gc-sections" \
 	$(CONFIGURE) --prefix=/usr --without-x --enable-usb --disable-pcnet --enable-cgi \
 		--disable-lgd --enable-net --sysconfdir=/usr/local/apcupsd --bindir=/bin \
 		--disable-dumb --disable-snmp --disable-net-snmp --with-cgi-bin=/www/apcupsd --with-serial-dev=
@@ -2779,7 +2778,6 @@ dnscrypt-clean:
 
 tor/stamp-h1: openssl zlib libevent
 	cd $(TOP)/tor && CC=$(CC) STRIP=$(STRIP) \
-	autoreconf && \
 	CFLAGS="-O2 -Wall $(EXTRACFLAGS)" \
 	$(CONFIGURE) --prefix=/usr --with-libevent-dir=$(TOP)/libevent/staged/usr/local \
 		--with-openssl-dir=$(TOP)/openssl --with-zlib-dir=$(TOP)/zlib \
